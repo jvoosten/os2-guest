@@ -57,11 +57,11 @@ void set_host_clipboard(const char *buf, uint32_t len) {
     return;
   }
   //fprintf(stdout, "set_host_clipboard: len: %d; buf: '%s'", len, buf); fflush(stdout);
-  Backdoor2(BACKDOOR_CMD_SET_CLIPBOARD_LEN, len);
+  BackdoorOut(BACKDOOR_CMD_SET_CLIPBOARD_LEN, len);
   const uint32_t* p = (const uint32_t*) buf;
   for (int i = 0; i < len; i += sizeof(uint32_t)) {
     //fprintf(stdout, "set_host_clipboard_text_piece: %d/%d [%c]\r\n", i, len, (char*) *p); fflush(stdout);
-    Backdoor2(BACKDOOR_CMD_SET_CLIPBOARD_TEXT, *p++);
+    BackdoorOut(BACKDOOR_CMD_SET_CLIPBOARD_TEXT, *p++);
   }
   free( (void *)buf);
 }
@@ -78,7 +78,7 @@ Host::~Host() {}
 host_point Host::pointer() {
   host_point pos;
   
-  uint32_t i = Backdoor(BACKDOOR_CMD_GET_MOUSE_POS);
+  uint32_t i = BackdoorIn(BACKDOOR_CMD_GET_MOUSE_POS);
   pos.x = i >> 16;
   pos.y = i & 0xffff;
   return pos;
@@ -86,7 +86,7 @@ host_point Host::pointer() {
 
 bool Host::pointer(const host_point& pos) {
   uint32_t d = (pos.x << 16) | pos.y;
-  Backdoor2(BACKDOOR_CMD_SET_MOUSE_POS, d);
+  BackdoorOut(BACKDOOR_CMD_SET_MOUSE_POS, d);
   return true;
 }
 
@@ -106,14 +106,14 @@ static void get_host_clipboard(int32_t len, char* buf) {
    uint32_t const *end = current + (len + sizeof(uint32_t) - 1) / sizeof(uint32_t);
    for (; current < end; current++) {
      // Gets the next 4 bytes of the clipboard or 0 if none are available.
-      *current = Backdoor(BACKDOOR_CMD_GET_CLIPBOARD_TEXT);
+      *current = BackdoorIn(BACKDOOR_CMD_GET_CLIPBOARD_TEXT);
    }
 }
 
 
 const char *Host::clipboard() {
   LOG_FUNCTION();
-  const int32_t len = Backdoor(BACKDOOR_CMD_GET_CLIPBOARD_LEN);
+  const int32_t len = BackdoorIn(BACKDOOR_CMD_GET_CLIPBOARD_LEN);
   if (len <= 0) {
     log(1, "failed to get clipboard len from host\r\n");
     return NULL;

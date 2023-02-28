@@ -35,9 +35,9 @@ assume  cs:_TEXT,ds:DGROUP
 _TEXT   segment word public 'CODE'
         assume  CS:_TEXT
 
-	;; int Backdoor(int)
-	public Backdoor_
-Backdoor_	proc	near
+	;; int BackdoorIn(int)
+	public BackdoorIn_
+BackdoorIn_	proc	near
 		push ebx
 		push ecx
 		push edx
@@ -50,11 +50,11 @@ Backdoor_	proc	near
 		pop ecx
 		pop ebx
 		ret
-Backdoor_	endp
+BackdoorIn_	endp
 	
-	;; int Backdoor2(int, int)
-	public Backdoor2_
-Backdoor2_	proc	near
+	;; int BackdoorOut(int, int)
+	public BackdoorOut_
+BackdoorOut_	proc	near
 		push ebx
 		push ecx
  		mov ecx, eax
@@ -65,7 +65,7 @@ Backdoor2_	proc	near
 		pop ecx
 		pop ebx
 		ret
-Backdoor2_	endp
+BackdoorOut_	endp
 	
 _TEXT   ends
         end
