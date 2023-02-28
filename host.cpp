@@ -100,33 +100,37 @@ bool Host::clipboard(const char *b) {
   return true;
 }
 
-static void get_host_clipboard(int32_t len, char* buf) {
-  LOG_FUNCTION();
-   uint32_t *current = (uint32_t *)buf;
-   uint32_t const *end = current + (len + sizeof(uint32_t) - 1) / sizeof(uint32_t);
-   for (; current < end; current++) {
-     // Gets the next 4 bytes of the clipboard or 0 if none are available.
-      *current = BackdoorIn(BACKDOOR_CMD_GET_CLIPBOARD_TEXT);
-   }
-}
+/**
+\brief Get clipboard from host
+\return an UTF-8 encoded string or NULL if there was no data
 
-
-const char *Host::clipboard() {
+Note: the returned string must be freed later.
+*/
+const char *Host::clipboard() 
+{
   LOG_FUNCTION();
-  const int32_t len = BackdoorIn(BACKDOOR_CMD_GET_CLIPBOARD_LEN);
+  int32_t len = BackdoorIn (BACKDOOR_CMD_GET_CLIPBOARD_LEN);
   if (len <= 0) {
-    log(1, "failed to get clipboard len from host\r\n");
+    log(1, "failed to get clipboard length from host\r\n");
     return NULL;
   }
-  char* buf;
-  APIRET rc = DosAllocSharedMem((PPVOID)&buf,
-			     NULL, len+4, 
-			     PAG_COMMIT | PAG_WRITE | OBJ_GIVEABLE);
-  if (rc != NO_ERROR) {
-    log(1, "alloc failed\r\n");
+  char *buf = (char *)malloc (len * sizeof (int32_t) + 10);
+  if (!buf)
+  {
+    log(1, "Memory allocation failed\r\n");
     return NULL;
   }
-  get_host_clipboard(len, buf);
-  return buf;
+
+   // The buffer is read 4 bytes at a time.
+   uint32_t *current = (uint32_t *)buf;
+   len = (len + sizeof (uint32_t) - 1) / sizeof (uint32_t);
+   while (len > 0)
+   {
+      *current = BackdoorIn(BACKDOOR_CMD_GET_CLIPBOARD_TEXT);
+      current++;
+      len--;
+   }
+
+   return buf;
 }
 

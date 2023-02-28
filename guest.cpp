@@ -129,18 +129,79 @@ bool Guest::pointer_visible(bool visible) {
   return true;
 }
 
-/** Sets the guest clipboard contents or releases b if that fails. */
+/**
+ \brief Sets the guest clipboard contents or releases b if that fails. 
+ \param b Input string in UTF-8 format 
+ \return True upon success, false otherwise
+ 
+ Does internal conversion to current codepage
+ 
+ */
 bool Guest::clipboard(const char* b) {
-  if (WinOpenClipbrd(hab_)) {
-    log(3, "opened clipboard");
+  LOG_FUNCTION ();
+  bool ret = true;
+  
+  int rc = 0;
+  int len = strlen (b);
+  UniChar *utmp = NULL; 
+  if (WinOpenClipbrd(hab_)) 
+  {
+    log (3, "opened clipboard");
     WinEmptyClipbrd(hab_);
-    WinSetClipbrdData(hab_, (ULONG) b, CF_TEXT, CFI_POINTER);
+    
+    logf (3, "input length = %d\r\n", len);
+    // Do all the stuff to convert to the local codepage; first to UCS, then local
+    utmp = (UniChar *)malloc (2 * len + 10); // Probably overkill if we get lots of 3-byte UTF-8 bytes in
+    if (!utmp)
+    {
+      log (0, "Failed to allocate memory for conversion\r\n");
+    }
+    else
+    {
+      rc = UniStrToUcs (utf8_ucs, utmp, (char *)b, len + 1); // Len + 1 for the terminating byte
+      if (rc != ULS_SUCCESS)
+      {
+	logf (0, "Conversion to UCS failed: 0x%x\r\n", rc);
+      }
+      else
+      {
+	// For the clipboard we must use shared memory
+	char *buf = NULL; 
+	rc = DosAllocSharedMem((PPVOID)&buf,
+			       NULL, len + 10, 
+			       PAG_COMMIT | PAG_WRITE | OBJ_GIVEABLE);
+	if (rc != NO_ERROR)
+	{
+	  log (0, "Failed to allocate shared memory for guest clipboard.");
+	}
+	else
+	{
+	  rc = UniStrFromUcs (local_ucs, buf, utmp, len);
+	  if (rc != ULS_SUCCESS)
+	  {
+	    log (0, "Conversion to local codepage failed\r\n");
+	    DosFreeMem (buf);
+	  }
+	  else
+	  {
+	    // Finally! Set the clipboard
+	    WinSetClipbrdData(hab_, (ULONG) buf, CF_TEXT, CFI_POINTER);
+	  }
+	}
+      }
+    }
     WinCloseClipbrd(hab_);
-    return true;
   }
-  log(0, "Failed to open Clipboard");
-  DosFreeMem((PVOID) b);
-  return false;
+  else
+  {
+    log(0, "Failed to open Clipboard");
+    ret = false;
+  }
+  
+  free ((void *)utmp);
+  free ((void *)b);
+  
+  return ret;
 }
 
 
@@ -197,7 +258,7 @@ const char *Guest::clipboard() {
 	*d = '\0'; // Finish string
 	
 	// Step two: convert to UCS-2
-	rc = UniStrToUcs (local_ucs, utmp, copy, len);
+	rc = UniStrToUcs (local_ucs, utmp, copy, len + 1); // Len + 1 for null byte?
 	if (rc != ULS_SUCCESS)
 	{
 	  log (0, "Failed conversion to UCS\r\n");
@@ -216,7 +277,7 @@ const char *Guest::clipboard() {
 	  }
 	}
       }
-      
+
 #if 0
       // Some hexprint debug
       char buf[250];

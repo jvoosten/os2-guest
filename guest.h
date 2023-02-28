@@ -70,7 +70,6 @@ class Guest {
   
   /* For conversion of local strings to UTF8 for the external clipboard */
   UconvObject local_ucs, utf8_ucs;
-
 };
 
 
