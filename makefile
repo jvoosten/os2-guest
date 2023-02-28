@@ -7,23 +7,23 @@ CC 	= wcl386
 AS 	= wasm
 
 # debug info and warning level 3
-CFLAGS		= -d1 -w3
-ASFLAGS 	= -d1
+CFLAGS		= -d3 -w3
+ASFLAGS 	= -d3
 LDFLAGS 	= debug all
 SYSTEM		= os2v2
 SYSTEM_PM	= os2v2_pm
 
 # Binary and Objects for vmtoolsd
 VMTOOLSD_EXE	= vmtoolsd.exe
-VMTOOLSD_OBJS 	= backdoor.obj 	&
-		log.obj 	&
+VMTOOLSD_OBJS	= backdoor.obj	&
+		log.obj		&
 		guest.obj 	&
 		host.obj 	&
 		vmtoolsd.obj
 
 # Binary and Objects for vmtoolsd
 VMTOOLSCTL_EXE	= vmtoolsctl.exe
-VMTOOLSCTL_OBJS = log.obj 	&
+VMTOOLSCTL_OBJS = log.obj	&
 		vmtoolsctl.obj
 
 #########################################################
@@ -43,11 +43,11 @@ config.h: config.h.in
 
 $(VMTOOLSD_EXE): config.h $(VMTOOLSD_OBJS)
 	wlink system $(SYSTEM_PM) $(LDFLAGS) name $(VMTOOLSD_EXE) &
-        file {$(VMTOOLSD_OBJS)}
+	 file {$(VMTOOLSD_OBJS)}
 
 $(VMTOOLSCTL_EXE): config.h $(VMTOOLSCTL_OBJS)
 	wlink system $(SYSTEM) $(LDFLAGS) name $(VMTOOLSCTL_EXE) &
-        file {$(VMTOOLSCTL_OBJS)}
+	 file {$(VMTOOLSCTL_OBJS)}
 
 DIST_DIR	= .\os2-guest-$(VERSION)
 DIST_ZIP	= os2-guest-$(VERSION).zip
