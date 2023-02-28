@@ -45,11 +45,11 @@ class Guest {
   /** Shows or hides the pointer  */
   bool pointer_visible(bool visible);
 
-  /** Sets the host clipboard contents */
-  bool clipboard(char* b);
+  /** Sets the guest clipboard contents */
+  bool clipboard (const char *b);
 
-  /** Gets the host clipboard contents or NULL if none exist */
-  char* clipboard();
+  /** Gets the guest clipboard contents or NULL if none exist */
+  const char *clipboard();
 
   /** converts a host to guest point */
   guest_point host_to_guest(const host_point& hp);

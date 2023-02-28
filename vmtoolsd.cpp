@@ -82,14 +82,14 @@ int vmtools_daemon() {
 
     hp = host.pointer();
     logf(5, "pointer in host[%d], pointer_host[%d,%d]", 
-	 pointer_in_host(hp), hp.x, hp.y);
+        pointer_in_host(hp), hp.x, hp.y);
     if (pointer_in_host(hp) && !pointer_host) {
       log(1, "pointer back in host");
       // Moved to the host
       pointer_host = true;
-      char* c = guest.clipboard();
+      const char* c = guest.clipboard();
       if (c) {
-	logf(1, "Set host clipboard: [%s]", c);
+	logf(1, "Set host clipboard: [%900s]", c);
 	host.clipboard(c);
       }
       // Hide mouse if it's visible.
@@ -105,9 +105,9 @@ int vmtools_daemon() {
 	guest.pointer_visible(true);
 	mouse_hidden = false;
       }
-      char* c = host.clipboard();
+      const char *c = host.clipboard();
       if (c) {
-	logf(3, "Set guest clipboard: [%s]\r\n", c);
+	logf(3, "Set guest clipboard: [%900s]\r\n", c);
 	guest.clipboard(c);
       }
 

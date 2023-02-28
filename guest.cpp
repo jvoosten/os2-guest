@@ -14,6 +14,10 @@
  *   either  express  or implied.  See  the  License for  the specific
  *   language governing permissions and limitations under the License.
  */
+
+#include <stdlib.h>
+#include <string.h>
+
 #include "guest.h"
 
 #include "log.h"
@@ -102,7 +106,7 @@ bool Guest::pointer_visible(bool visible) {
 }
 
 /** Sets the guest clipboard contents or releases b if that fails. */
-bool Guest::clipboard(char* b) {
+bool Guest::clipboard(const char* b) {
   if (WinOpenClipbrd(hab_)) {
     log(3, "opened clipboard");
     WinEmptyClipbrd(hab_);
@@ -117,21 +121,72 @@ bool Guest::clipboard(char* b) {
 
 
 /** Gets the guest clipboard contents or NULL if none exist */
-char* Guest::clipboard() {
+const char *Guest::clipboard() {
   LOG_FUNCTION();
   if (!WinOpenClipbrd(hab_)) {
     log(2, "Failed to open Clipboard");
     return NULL;
   }
   
-  char* ret = NULL;
+  const char *ret = NULL;
   log(2, "WinOpenClipbrd: succeed");
   ULONG fmtInfo = 0;
   if (WinQueryClipbrdFmtInfo(hab_, CF_TEXT, &fmtInfo)) {
     log(3, "Has text in clipboard");
     const char *text = (const char*)WinQueryClipbrdData(hab_, CF_TEXT); 
     if (text) {
-      ret = strdup(text);
+      // Convert 0D/0A to just 0A for copy/paste
+      int len = strlen (text);
+      ret = (const char *) malloc (len + 10);
+      if (!ret)
+      {
+        log (1, "Failed to allocate memory");
+        return NULL;
+      }
+      const char *s = text;
+      char *d = (char *)ret;
+
+      while (*s)
+      {
+        if (*s != '\r')
+        {
+          *d = *s;
+          d++;
+        }
+        s++;
+      }
+      // Test: add euro symbol in UTF 8
+      *d++ = '\xe2';
+      *d++ = '\x82';
+      *d++ = '\xac';
+      *d = '\0';
+
+#if 0
+      // Some hexprint debug
+      char buf[250];
+      s = ret;
+      d = buf;
+      int count = 0;
+      buf[0] = '\0';
+      while (*s)
+      {
+        d += sprintf (d, "%02x ", (int)(*s));
+        s++;
+        len--;
+        count++;
+        if (count == 16)
+        {
+          log (3, buf);
+          count = 0;
+          d = buf;
+        }
+      }
+      if (count > 0)
+      {
+        log (3, buf);
+      }
+#endif
+
       log(1, "contents assigned");
     }
   }

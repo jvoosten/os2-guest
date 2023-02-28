@@ -51,19 +51,19 @@
 #define BACKDOOR_CMD_SET_CLIPBOARD_TEXT 0x09
 
 
-void set_host_clipboard(char* buf, uint32_t len) {
+void set_host_clipboard(const char *buf, uint32_t len) {
   LOG_FUNCTION();
   if (!buf) {
     return;
   }
   //fprintf(stdout, "set_host_clipboard: len: %d; buf: '%s'", len, buf); fflush(stdout);
   Backdoor2(BACKDOOR_CMD_SET_CLIPBOARD_LEN, len);
-  uint32_t* p = (uint32_t*) buf;
+  const uint32_t* p = (const uint32_t*) buf;
   for (int i = 0; i < len; i += sizeof(uint32_t)) {
     //fprintf(stdout, "set_host_clipboard_text_piece: %d/%d [%c]\r\n", i, len, (char*) *p); fflush(stdout);
     Backdoor2(BACKDOOR_CMD_SET_CLIPBOARD_TEXT, *p++);
   }
-  free(buf);
+  free( (void *)buf);
 }
 
 static const int16_t XPOS_IN_HOST = -100;
@@ -90,7 +90,7 @@ bool Host::pointer(const host_point& pos) {
   return true;
 }
 
-bool Host::clipboard(char* b) {
+bool Host::clipboard(const char *b) {
   LOG_FUNCTION();
   if (!b) {
     return false;
@@ -111,7 +111,7 @@ static void get_host_clipboard(int32_t len, char* buf) {
 }
 
 
-char* Host::clipboard() {
+const char *Host::clipboard() {
   LOG_FUNCTION();
   const int32_t len = Backdoor(BACKDOOR_CMD_GET_CLIPBOARD_LEN);
   if (len <= 0) {
@@ -120,7 +120,7 @@ char* Host::clipboard() {
   }
   char* buf;
   APIRET rc = DosAllocSharedMem((PPVOID)&buf,
-			     NULL, len+1, 
+			     NULL, len+4, 
 			     PAG_COMMIT | PAG_WRITE | OBJ_GIVEABLE);
   if (rc != NO_ERROR) {
     log(1, "alloc failed\r\n");

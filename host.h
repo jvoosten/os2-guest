@@ -45,10 +45,10 @@ class Host {
   bool pointer(const host_point& pos);
 
   /** Sets the host clipboard contents */
-  bool clipboard(char* b);
+  bool clipboard(const char *b);
 
   /** Gets the host clipboard contents or NULL if none exist */
-  char* clipboard();
+  const char *clipboard();
 };
 
 #endif
