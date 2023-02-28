@@ -65,6 +65,13 @@ int vmtools_daemon() {
   KBDKEYINFO key;
   Host host;
   Guest guest;
+
+  if (!guest.initialize ())
+  {
+    return 1;
+  }
+
+
   host_point hp = host.pointer();
   bool pointer_host = pointer_in_host(hp);
   bool mouse_hidden = false;

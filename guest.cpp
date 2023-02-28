@@ -33,6 +33,7 @@
 #define INCL_ERRORS
 #include <os2.h>
 
+
 Guest::Guest() {
   PTIB ptib;
   PPIB ppib;
@@ -41,23 +42,46 @@ Guest::Guest() {
 
   last_point_.x = -1;
   last_point_.y = -1;
+}
 
+bool Guest::initialize ()
+{
   // TODO(rushfan): Check for errors here.
   hab_ = WinInitialize(0L);
   if (!hab_) {
     log(0, "Failed to create HAB\r\n");
+    return false;
   }
   hmq_ = WinCreateMsgQueue(hab_, 0);
   if (!hmq_) {
     log(0, "Failed to create HMQ\r\n");
+    return false;
   }
 
   screen_max_y_ = WinQuerySysValue(HWND_DESKTOP, SV_CYSCREEN);
   logf(2, "Screen size max y: [%d]\r\n", screen_max_y_);
+  
+  /* Create codepage conversion objects */
+  int ret = UniCreateUconvObject ((UniChar *)L"", &local_ucs);
+  if (ret != ULS_SUCCESS)
+  {
+     log (0, "Failed to create local UniConv object\r\n");
+     return false;
+  }
+  ret = UniCreateUconvObject ((UniChar *)L" IBM-1208" , &utf8_ucs);
+  if (ret != ULS_SUCCESS)
+  {
+     log (0, "Failed to create UTF-8 UniConv object\r\n");
+     return false;
+  }
+  
+  return true;
 }
 
 Guest::~Guest() {
   // Cleanup
+  UniFreeUconvObject (local_ucs);
+  UniFreeUconvObject (utf8_ucs);
   WinDestroyMsgQueue(hmq_);
   WinTerminate(hab_);
 }
@@ -120,7 +144,14 @@ bool Guest::clipboard(const char* b) {
 }
 
 
-/** Gets the guest clipboard contents or NULL if none exist */
+/** 
+\brief Gets the guest clipboard contents or NULL if none exist 
+\return A string in UTF-8 encoding
+
+The text is internally transformed from the current codepage to UTF-8.
+Also CR/LF pairs are converted to single LF's, Unix style.
+
+*/
 const char *Guest::clipboard() {
   LOG_FUNCTION();
   if (!WinOpenClipbrd(hab_)) {
@@ -131,36 +162,61 @@ const char *Guest::clipboard() {
   const char *ret = NULL;
   log(2, "WinOpenClipbrd: succeed");
   ULONG fmtInfo = 0;
-  if (WinQueryClipbrdFmtInfo(hab_, CF_TEXT, &fmtInfo)) {
+  if (WinQueryClipbrdFmtInfo(hab_, CF_TEXT, &fmtInfo)) 
+  {
     log(3, "Has text in clipboard");
-    const char *text = (const char*)WinQueryClipbrdData(hab_, CF_TEXT); 
-    if (text) {
-      // Convert 0D/0A to just 0A for copy/paste
-      int len = strlen (text);
-      ret = (const char *) malloc (len + 10);
-      if (!ret)
+    const char *org = (const char *)WinQueryClipbrdData(hab_, CF_TEXT);
+    if (org) 
+    {
+      int rc = 0;
+      int len = 0;
+      char *copy = NULL;
+      UniChar *utmp = NULL;
+      
+      len = strlen (org);
+      copy = (char *) malloc (len * 3 + 10); // Allocate enough for the output UTF-8 string
+      utmp = (UniChar *) malloc (len * 2 + 10); // Intermediate UCS-2 buffer
+      if (!copy || !utmp)
       {
-        log (1, "Failed to allocate memory");
-        return NULL;
+	log (1, "Failed to allocate memory for conversion\r\n");
       }
-      const char *s = text;
-      char *d = (char *)ret;
-
-      while (*s)
+      else
       {
-        if (*s != '\r')
-        {
-          *d = *s;
-          d++;
-        }
-        s++;
+	// Step one: convert 0D/0A to just 0A for copy/paste
+	const char *s = org;
+	char *d = copy;
+	while (*s)
+	{
+	  if (*s != '\r')
+	  {
+	    *d = *s;
+	    d++;
+	  }
+	  s++;
+	}
+	*d = '\0'; // Finish string
+	
+	// Step two: convert to UCS-2
+	rc = UniStrToUcs (local_ucs, utmp, copy, len);
+	if (rc != ULS_SUCCESS)
+	{
+	  log (0, "Failed conversion to UCS\r\n");
+	}
+	else
+	{
+	  // Step 3: back to UTF, into the 'copy'  buffer
+	  rc = UniStrFromUcs (utf8_ucs, copy, utmp, len * 3);
+	  if (rc != ULS_SUCCESS)
+	  {
+	    log (0, "Failed conversion to UTF-8\r\n");
+	  }
+	  else
+	  {
+	    ret = copy;
+	  }
+	}
       }
-      // Test: add euro symbol in UTF 8
-      *d++ = '\xe2';
-      *d++ = '\x82';
-      *d++ = '\xac';
-      *d = '\0';
-
+      
 #if 0
       // Some hexprint debug
       char buf[250];
@@ -170,24 +226,29 @@ const char *Guest::clipboard() {
       buf[0] = '\0';
       while (*s)
       {
-        d += sprintf (d, "%02x ", (int)(*s));
-        s++;
-        len--;
-        count++;
-        if (count == 16)
-        {
-          log (3, buf);
-          count = 0;
-          d = buf;
-        }
+	d += sprintf (d, "%02x ", (int)(*s));
+	s++;
+	len--;
+	count++;
+	if (count == 16)
+	{
+	  log (3, buf);
+	  count = 0;
+	  d = buf;
+	}
       }
       if (count > 0)
       {
-        log (3, buf);
+	log (3, buf);
       }
 #endif
-
+      
       log(1, "contents assigned");
+      free (utmp);
+      if (!ret)
+      {
+        free (copy);
+      }
     }
   }
   log(4, "Closing Clipboard");

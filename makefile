@@ -35,7 +35,7 @@ VMTOOLSCTL_OBJS = log.obj	&
 .asm.obj:
 	$(AS) $(ASFLAGS) $<
 
-all:	config.h $(VMTOOLSD_EXE) $(VMTOOLSCTL_EXE)
+all:	config.h $(VMTOOLSD_EXE) $(VMTOOLSCTL_EXE) vmtest.exe
 
 .BEFORE
 config.h: config.h.in 
@@ -43,11 +43,16 @@ config.h: config.h.in
 
 $(VMTOOLSD_EXE): config.h $(VMTOOLSD_OBJS)
 	wlink system $(SYSTEM_PM) $(LDFLAGS) name $(VMTOOLSD_EXE) &
-	 file {$(VMTOOLSD_OBJS)}
+	 file {$(VMTOOLSD_OBJS)} library libconv
 
 $(VMTOOLSCTL_EXE): config.h $(VMTOOLSCTL_OBJS)
 	wlink system $(SYSTEM) $(LDFLAGS) name $(VMTOOLSCTL_EXE) &
 	 file {$(VMTOOLSCTL_OBJS)}
+
+# A test tool
+vmtest.exe:     vmtest.obj
+	wlink system $(SYSTEM) $(LDFLAGS) name vmtest.exe &
+	 file {vmtest.obj} library libconv
 
 DIST_DIR	= .\os2-guest-$(VERSION)
 DIST_ZIP	= os2-guest-$(VERSION).zip

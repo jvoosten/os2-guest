@@ -17,6 +17,9 @@
 #ifndef INCLUDED_GUEST_H
 #define INCLUDED_GUEST_H
 
+#include <uconv.h>
+
+
 #include "host.h"
 
 /**
@@ -35,6 +38,8 @@ class Guest {
  public:
   Guest();
   ~Guest();
+  
+  bool initialize ();
   
   /** Gets the guest pointer position */
   guest_point pointer();
@@ -62,6 +67,10 @@ class Guest {
   unsigned long hmq_;
   unsigned long screen_max_y_;
   guest_point last_point_;
+  
+  /* For conversion of local strings to UTF8 for the external clipboard */
+  UconvObject local_ucs, utf8_ucs;
+
 };
 
 
