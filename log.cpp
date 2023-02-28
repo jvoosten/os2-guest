@@ -37,7 +37,7 @@ void set_loglevel(int lvl) {
 }
 
 void set_logfile(const char* fn) {
-  logh = fopen(fn, "a");
+  logh = fopen(fn, "ab");
   if (!logh) {
     logh = stderr;
   }
@@ -62,7 +62,7 @@ void logf(int lvl, const char* msg, ...) {
   char buf[1024];
   va_list argptr;
   va_start(argptr, msg);
-  vsprintf(buf, msg, argptr);
+  vsnprintf(buf, 1023, msg, argptr);
   va_end(argptr);
   log(lvl, buf);
 }
