@@ -50,9 +50,9 @@ $(VMTOOLSCTL_EXE): config.h $(VMTOOLSCTL_OBJS)
 	 file {$(VMTOOLSCTL_OBJS)}
 
 # A test tool
-vmtest.exe:     vmtest.obj
+vmtest.exe:     vmtest.obj log.obj
 	wlink system $(SYSTEM) $(LDFLAGS) name vmtest.exe &
-	 file {vmtest.obj} library libconv
+	 file {vmtest.obj log.obj} library libconv
 
 DIST_DIR	= .\os2-guest-$(VERSION)
 DIST_ZIP	= os2-guest-$(VERSION).zip
