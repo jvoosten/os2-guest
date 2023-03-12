@@ -37,14 +37,14 @@ void set_loglevel(int lvl) {
 }
 
 void set_logfile(const char* fn) {
-  logh = fopen(fn, "ab");
+  logh = fopen(fn, "wt");
   if (!logh) {
     logh = stderr;
   }
 }
 
 void log(const char* s) {
-  fprintf(logh, "%s\r\n", s);
+  fprintf(logh, "%s\n", s);
   fflush(logh);
 }
 
@@ -62,9 +62,54 @@ void logf(int lvl, const char* msg, ...) {
   char buf[1024];
   va_list argptr;
   va_start(argptr, msg);
-  vsnprintf(buf, 1023, msg, argptr);
+  vsnprintf(buf, 1024, msg, argptr);
   va_end(argptr);
   log(lvl, buf);
+}
+
+/**
+\brief Print a buffer as hexadecimal values
+
+*/
+void loghex(const char *buf, int len)
+{
+  const char *fmt = "%-48s  %s\n";
+  char buf1[50];
+  char buf2[20];
+  
+  char *h = buf1; // hex-pos
+  char *t = buf2; // text-pos
+  const char *s = buf;
+  int i = 0;
+  
+  for (i = 0; i < len; i++)
+  {
+    char c = *s++;
+    h += sprintf (h, "%02x ", c);
+    if (c < 32 || c > 127)
+    {
+      c = '.';
+    }
+    *t = c;
+    t++;
+    
+    if ((i & 0xF) == 0xF)
+    {
+      *t = '\0';
+      fprintf(logh, fmt, buf1, buf2);
+      
+      // reset pointers
+      h = buf1;
+      t = buf2;
+    }
+  }
+  
+  // Print final bit
+  *t = '\0';
+  if (h != buf1)
+  {
+    fprintf(logh, fmt, buf1, buf2);
+  }
 }
 
 

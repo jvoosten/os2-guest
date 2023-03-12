@@ -22,6 +22,7 @@ void set_logfile(const char* fn);
 void log(const char* s);
 void log(int lvl, const char* s);
 void logf(int lvl, const char* msg, ...);
+void loghex(const char *buf, int len);
 
 #define LOG_FUNCTION()  log(3, __FUNCTION__)
 
