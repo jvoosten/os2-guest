@@ -50,9 +50,9 @@ $(VMTOOLSCTL_EXE): config.h $(VMTOOLSCTL_OBJS)
 	 file {$(VMTOOLSCTL_OBJS)}
 
 # A test tool
-vmtest.exe:     vmtest.obj log.obj
+vmtest.exe:     vmtest.obj backdoor.obj
 	wlink system $(SYSTEM) $(LDFLAGS) name vmtest.exe &
-	 file {vmtest.obj log.obj} library libconv
+	 file {vmtest.obj backdoor.obj}
 
 DIST_DIR	= .\os2-guest-$(VERSION)
 DIST_ZIP	= os2-guest-$(VERSION).zip
@@ -77,6 +77,7 @@ clean: .SYMBOLIC
 	-del *.obj
 	-del $(VMTOOLSCTL_EXE)
 	-del $(VMTOOLSD_EXE)
+	-del vmtest.exe
 	-rm -fr $(DIST_DIR)
 	-del $(DIST_ZIP)
 

@@ -17,9 +17,30 @@
 #ifndef INCLUDED_BACKDOOR_H
 #define INCLUDED_BACKDOOR_H
 
+#include <unistd.h>
+
 extern "C" {
-extern int BackdoorIn(int);
-extern int BackdoorOut(int, int);
+extern int BackdoorIn (int);
+extern int BackdoorOut (int, int);
+
+/* Open RPC channel to host VM; return -1 on error or channel number (0-7)*/
+extern int BackdoorRPCOpen ();
+/** 
+\brief Send an RPC command (string) to the VM host;
+\param channel Channel number from RPCOpen()
+\param out String to string to the host
+\param reply_id [out] An ID to receive the reply 
+\return -1 upon error, otherwise the length of the reply
+
+The reply_id is necessary to receive the correct string from the VM; pass in
+the address of a variable.
+*/
+extern int BackdoorRPCSend (int channel, const char *out, int *reply_id);
+/* Receive RPC reply in buffer */
+extern int BackdoorRPCReceive (int channel, char *in, int len, int reply_id);
+/* Close RPC channel */
+extern void BackdoorRPCClose (int channel);
+
 }
 
 
