@@ -38,6 +38,11 @@ class Host {
   Host();
   ~Host();
   
+  bool initialize ();
+  
+  int version() const;
+  int speed() const;
+  
   /** Gets the host pointer position */
   host_point pointer();
 
@@ -49,6 +54,11 @@ class Host {
 
   /** Gets the host clipboard contents or NULL if none exist */
   const char *clipboard();
+  
+private:
+  int m_version;
+  int m_speed;
+  int m_gui_options;
 };
 
 #endif

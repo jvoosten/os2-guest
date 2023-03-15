@@ -43,12 +43,16 @@
    EBX gets optional params
 */
 
-#define BACKDOOR_CMD_GET_MOUSE_POS 0x04
-#define BACKDOOR_CMD_SET_MOUSE_POS 0x05
-#define BACKDOOR_CMD_GET_CLIPBOARD_LEN 0x06
+#define BACKDOOR_CMD_SPEED              0x01
+#define BACKDOOR_CMD_GET_MOUSE_POS      0x04
+#define BACKDOOR_CMD_SET_MOUSE_POS      0x05
+#define BACKDOOR_CMD_GET_CLIPBOARD_LEN  0x06
 #define BACKDOOR_CMD_GET_CLIPBOARD_TEXT 0x07
-#define BACKDOOR_CMD_SET_CLIPBOARD_LEN 0x08
+#define BACKDOOR_CMD_SET_CLIPBOARD_LEN  0x08
 #define BACKDOOR_CMD_SET_CLIPBOARD_TEXT 0x09
+#define BACKDOOR_CMD_GET_VERSION        0x0A
+#define BACKDOOR_CMD_GET_GUI_OPTIONS    0x0D
+#define BACKDOOR_CMD_SET_GUI_OPTIONS    0x0E
 
 
 void set_host_clipboard(const char *buf, uint32_t len) {
@@ -72,8 +76,72 @@ bool pointer_in_host(const host_point& pos) {
   return pos.x == XPOS_IN_HOST;
 }
 
-Host::Host() {}
+Host::Host() 
+  : m_version (0), m_speed (0)
+{
+}
+
 Host::~Host() {}
+
+bool Host::initialize ()
+{
+   // Get version number; note that there is additional info in the ECX register 
+   // that we don't get here.
+   m_version = BackdoorIn (BACKDOOR_CMD_GET_VERSION);
+   logf (1, "Version of host platform: %d" , m_version);
+   if (m_version != 6)
+   {
+     log (0, "Incompatible host platform");
+     return false;
+   }
+   
+   m_speed = BackdoorIn (BACKDOOR_CMD_SPEED);
+   logf (1, "CPU speed: %d", m_speed);
+   m_gui_options = BackdoorIn (BACKDOOR_CMD_GET_GUI_OPTIONS);
+   log (1, "GUI options from Host:");
+   if (m_gui_options & 0x01)
+   {
+     log (1, "  Grab cursor when it enters window"); 
+   }
+   if (m_gui_options & 0x02)
+   {
+     log (1, "  Ungrab cursor when it leaves window");
+   }
+   if (m_gui_options & 0x04)
+   {
+     log (1, "  Scroll when cursor approaches edge");
+   }
+   if (m_gui_options & 0x10)
+   {
+     log (1, "  Copy and paste between host and guest");
+   }
+   if (m_gui_options & 0x40)
+   {
+     log (1, "  Indicates if it runs in fullscreen");
+   }
+   if (m_gui_options & 0x80)
+   {
+     log (1, "  Swtich to fullscreen");
+   }
+   if (m_gui_options & 0x500)
+   {
+     log (1, "  Time synchronized between host and guest");
+   }
+
+   return true;
+}
+
+
+int Host::version() const
+{
+  return m_version;
+}
+
+int Host::speed () const
+{
+  return m_speed;
+}
+
 
 host_point Host::pointer() {
   host_point pos;

@@ -66,9 +66,13 @@ int vmtools_daemon() {
   Host host;
   Guest guest;
 
-  if (!guest.initialize ())
+  if (!host.initialize ())
   {
     return 1;
+  }
+  if (!guest.initialize ())
+  {
+    return 2;
   }
 
 
