@@ -46,7 +46,8 @@
 #define NUMBER_OF_BYTES 255
 #define NAME_SEG "\\SHAREMEM\\VMTOOLS.MEM"
 
-int vmtools_daemon() {
+int vmtools_daemon() 
+{
   LOG_FUNCTION();
   printf("Press ESCAPE to exit.\r\nStarting Daemon...\r\n");
   char* shm = NULL;
@@ -82,37 +83,44 @@ int vmtools_daemon() {
 
   for (;;) {
     KbdPeek(&key, 0);
-    if (key.fbStatus != 0) {
+    if (key.fbStatus != 0) 
+    {
       APIRET krc = KbdCharIn(&key, IO_WAIT, 0);
       logf(4, "got key: [%d]\r\n", key.chChar);
-      if (key.chChar == 27 /* ESC */) {
+      if (key.chChar == 27 /* ESC */) 
+      {
 	puts("Exiting...\r\n");
 	break;
       }
     }
 
     hp = host.pointer();
-    logf(5, "pointer in host[%d], pointer_host[%d,%d]", 
-        pointer_in_host(hp), hp.x, hp.y);
-    if (pointer_in_host(hp) && !pointer_host) {
+    logf(5, "pointer in host[%d], pointer_host[%d,%d]", pointer_in_host(hp), hp.x, hp.y);
+    if (pointer_in_host(hp) && !pointer_host) 
+    {
       log(1, "pointer back in host");
       // Moved to the host
       pointer_host = true;
       const char* c = guest.clipboard();
-      if (c) {
+      if (c) 
+      {
 	logf(1, "Set host clipboard: [%900s]", c);
 	host.clipboard(c);
       }
       // Hide mouse if it's visible.
-      if (!mouse_hidden) {
+      if (!mouse_hidden) 
+      {
 	log(1, "mouse hidden\r\n");
 	guest.pointer_visible(false);
         mouse_hidden = true;
       }
-    } else if (!pointer_in_host(hp) && pointer_host) {
+    } 
+    else if (!pointer_in_host(hp) && pointer_host) 
+    {
       log(1, "pointer back in guest");
       pointer_host = false;
-      if (mouse_hidden) {
+      if (mouse_hidden) 
+      {
 	guest.pointer_visible(true);
 	mouse_hidden = false;
       }
@@ -127,8 +135,9 @@ int vmtools_daemon() {
       guest_point gp = guest.host_to_guest(hp);
       guest.pointer(gp);
       logf(1, "[guest] pointer moved from [%d,%d] to [%d,%d]\r\n", ogp.x, ogp.y, gp.x, gp.y);
-
-    } else if (!pointer_host) {
+    } 
+    else if (!pointer_host) 
+    {
       // Grab the current position, flip it, and send to the host.
       guest_point gp = guest.pointer();
       host_point hp = guest.guest_to_host(gp);
@@ -137,8 +146,10 @@ int vmtools_daemon() {
     }
 
     // TODO check for shutdown signal if running as a daemon.
-    if (shm != NULL)  {
-      if (*shm == 'Q') {
+    if (shm != NULL)  
+    {
+      if (*shm == 'Q') 
+      {
 	// time to quit.
 	log(0, "Got signal to quit.\r\n");
 	break;
@@ -147,43 +158,52 @@ int vmtools_daemon() {
     DosSleep(100);
   }
 
-  if (mouse_hidden) {
+  if (mouse_hidden) 
+  {
     guest.pointer_visible(true);
   }
   DosFreeMem(shm);
   return 0;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) 
+{
   printf("vmtools: OS/2 Guest for VMWare. [https://github.com/wwiv/os2-guest]\r\n\r\n");
 
   // Interactive mode
 
-  for (int i = 1; i < argc; i++) {
+  for (int i = 1; i < argc; i++) 
+  {
     const char* arg = argv[i];
     const int alen = strlen(arg);
-    if (!alen) {
+    if (!alen) 
+    {
       continue;
     }
-    if (arg[0] == '-' || arg[0] == '/') {
-      if (alen < 2) {
+    if (arg[0] == '-' || arg[0] == '/') 
+    {
+      if (alen < 2) 
+      {
 	continue;
       }
       // Process switch.  If this should not go to a daemon
       // then exit while processing the command.
       char schar = (char)toupper(*(arg+1));
       const char* sval = (arg+2);
-      switch (schar) {
-      case 'D': {
-	if (sval) {
-	  set_loglevel(atoi(sval));
-	}
-      } break;
-      case 'L': {
-	if (sval) {
-	  set_logfile(sval);
-	}
-      } break;
+      switch (schar) 
+      {
+	case 'D': 
+	  if (sval) 
+	  {
+	    set_loglevel(atoi(sval));
+	  }
+	  break;
+	case 'L': 
+	  if (sval) 
+	  {
+	    set_logfile(sval);
+	  }
+	  break;
       }
       continue;
     }
