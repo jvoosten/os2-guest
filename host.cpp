@@ -79,7 +79,7 @@ void Host::announceToolsInstallation()
   rpc = BackdoorRPCOpen ();
   if (rpc < 0)
   {
-    log (1, "Failed to open RPC channel.");
+    log (1, "[Host] Failed to open RPC channel.");
     return;
   }
 
@@ -87,7 +87,7 @@ void Host::announceToolsInstallation()
   len = BackdoorRPCSend (rpc, "tools.set.version 2147483647", &reply_id);
   if (len < 0)
   {
-    logf (1, "Error from RPC: %d", len);
+    logf (1, "[Host] Error from RPC: %d", len);
   }
   else
   {
@@ -95,22 +95,22 @@ void Host::announceToolsInstallation()
     {
       if (BackdoorRPCReceive (rpc, buf, len, reply_id) < 0)
       {
-	log (1, "Receiving of reply failed.");
+	log (1, "[Host] Receiving of reply failed");
       }
       else
       {
 	buf[len] = '\0';
-	logf (2, "Received reply from RPC: %s", buf);
+	logf (2, "[Host] Received reply from RPC: %s", buf);
       }
     }
     else
     {
-      logf (1, "Reply too big (%d)", len);
+      logf (1, "[Host] Reply too big (%d)", len);
     }
   }
   
   BackdoorRPCClose (rpc);
-  log (2, "Closed RPC channel");
+  log (2, "[Host] Closed RPC channel");
 }
 
 /**
@@ -139,7 +139,7 @@ bool Host::isMouseIntegrationEnabled ()
 	my_data, 6, &data_len); 		// Data (3 words, only first one is used)
     if (rc == NO_ERROR)
     {
-    	logf (2, "Queried mouse integration: %04x", my_data[0]);
+    	logf (2, "[Host::isMouseIntegrationEnabled] return = 0x%04x", my_data[0]);
     	// bit 15 is ESX detection, bit 0 is absolute mouse position enabled
 	if (my_data[0] & 0x0001)
 	{
@@ -213,30 +213,35 @@ std::string Host::getClipboard ()
     std::string ret;
 
     int len = Backdoor1 (BACKDOOR_CMD_GET_CLIPBOARD_LEN);
-    if (len <= 0) {
+    if (len < 0) 
+    {
     	log (1, "[Host::getClipboard] Failed to get clipboard length");
-       return ret;
-    }
-  
-    char *buf = (char *) malloc (len * sizeof (int32_t) + 10);
-    if (!buf)
+    } 
+    // 0 means empty clipboard
+    else if (len > 0)
     {
-    	log (0, "[Host::getClipboard] Memory allocation failed");
-    	return ret;
+	char *buf = (char *) malloc (len * sizeof (int32_t) + 10);
+	if (!buf)
+	{
+	    log (0, "[Host::getClipboard] Memory allocation failed");
+	}
+	else
+	{
+	    // The buffer is read 4 bytes at a time.
+	    uint32_t *p = (uint32_t *)buf;
+	    int count = (len + sizeof (uint32_t) - 1) / sizeof (uint32_t);
+	    while (count > 0)
+	    {
+		*p++ = Backdoor1(BACKDOOR_CMD_GET_CLIPBOARD_TEXT);
+		count--;
+	    }
+	    logf (2, "[Host::getClipboard] Got %d bytes in clipboard", len);
+	   
+	    ret.assign (buf, len); 
+	    free (buf);
+	}
     }
-
-    // The buffer is read 4 bytes at a time.
-    uint32_t *p = (uint32_t *)buf;
-    int count = (len + sizeof (uint32_t) - 1) / sizeof (uint32_t);
-    while (count > 0)
-    {
-        *p++ = Backdoor1(BACKDOOR_CMD_GET_CLIPBOARD_TEXT);
-        count--;
-    }
-    logf (2, "[Host::getClipboard] Got %d bytes in clipboard", len);
-   
-    ret.assign (buf, len); 
-    free (buf);
+    
     m_oldClipboard = ret;
     return ret;
 }
@@ -262,11 +267,18 @@ void Host::setClipboard (const std::string &str)
     int len = str.size();
     logf (2, "[Host::setClipboard] Pushing %d bytes", len);
     int rc = Backdoor2 (BACKDOOR_CMD_SET_CLIPBOARD_LEN, len);
-    logf (2, "rc = %d" , rc);
-    const uint32_t* p = (const uint32_t*) str.c_str();
-    for (int i = 0; i < len; i += sizeof(uint32_t)) 
+    if (rc < 0)
     {
-      Backdoor2 (BACKDOOR_CMD_SET_CLIPBOARD_TEXT, *p++);
+    	log (1, "[Host::setClipboard] Not allowed to paste" );
+    }
+    else
+    {
+    	// Clipboard is also pushed 4 bytes at a time
+	const uint32_t* p = (const uint32_t*) str.c_str();
+	for (int i = 0; i < len; i += sizeof(uint32_t)) 
+	{
+	  Backdoor2 (BACKDOOR_CMD_SET_CLIPBOARD_TEXT, *p++);
+	}
     }
 }
 
