@@ -54,6 +54,13 @@
 #define BACKDOOR_CMD_GET_GUI_OPTIONS    0x0D
 #define BACKDOOR_CMD_SET_GUI_OPTIONS    0x0E
 
+#define BACKDOOR_CMD_ABSPOINTER_DATA    0x27
+#define BACKDOOR_CMD_ABSPOINTER_STATUS  0x28
+#define BACKDOOR_CMD_ABSPOINTER_COMMAND 0x29
+  #define ABSPOINTER_ENABLE             0x45414552
+  #define ABSPOINTER_DISABLE            0x0000005F
+  #define ABSPOINTER_RELATIVE           0x4c455252
+  #define ABSPOINTER_ABSOLUTE           0x53424152
 
 void set_host_clipboard(const char *buf, uint32_t len) {
   LOG_FUNCTION();
@@ -121,7 +128,7 @@ bool Host::initialize ()
    }
    if (m_gui_options & 0x80)
    {
-     log (1, "  Swtich to fullscreen");
+     log (1, "  Switch to fullscreen");
    }
    if (m_gui_options & 0x500)
    {
@@ -141,6 +148,30 @@ int Host::speed () const
 {
   return m_speed;
 }
+
+
+/**
+\brief Set absolute or relative mouse positioning
+\bool absolute When true, set mouse to absolute positioning by VM; otherwise relative
+*/
+
+
+void Host::setMousePositioning (bool absolute)
+{
+  if (absolute)
+  {
+    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_COMMAND, ABSPOINTER_ENABLE);
+    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_STATUS, 0);
+    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_DATA, 1);
+    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_COMMAND, ABSPOINTER_ABSOLUTE);
+  }
+  else
+  {
+    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_COMMAND, ABSPOINTER_RELATIVE);
+    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_COMMAND, ABSPOINTER_DISABLE);
+  }
+}
+
 
 
 host_point Host::pointer() {

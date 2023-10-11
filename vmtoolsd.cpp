@@ -77,6 +77,8 @@ int vmtools_daemon()
   }
 
 
+  host.setMousePositioning (true);
+  
   host_point hp = host.pointer();
   bool pointer_host = pointer_in_host(hp);
   bool mouse_hidden = false;
@@ -163,6 +165,9 @@ int vmtools_daemon()
     guest.pointer_visible(true);
   }
   DosFreeMem(shm);
+
+  host.setMousePositioning (false);
+
   return 0;
 }
 

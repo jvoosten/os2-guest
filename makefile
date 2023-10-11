@@ -35,7 +35,7 @@ VMTOOLSCTL_OBJS = log.obj	&
 .asm.obj:
 	$(AS) $(ASFLAGS) $<
 
-all:	config.h $(VMTOOLSD_EXE) $(VMTOOLSCTL_EXE) vmtest.exe
+all:	config.h $(VMTOOLSD_EXE) $(VMTOOLSCTL_EXE) vmtest.exe vmon.exe vmoff.exe
 
 .BEFORE
 config.h: config.h.in 
@@ -49,6 +49,14 @@ $(VMTOOLSCTL_EXE): config.h $(VMTOOLSCTL_OBJS)
 	wlink system $(SYSTEM) $(LDFLAGS) name $(VMTOOLSCTL_EXE) &
 	 file {$(VMTOOLSCTL_OBJS)}
 
+vmoff.exe:	vmoff.obj backdoor.obj
+	wlink system $(SYSTEM) $(LDFLAGS) name $@ &
+	  file {vmoff.obj backdoor.obj}
+
+vmon.exe:	vmon.obj backdoor.obj
+	wlink system $(SYSTEM) $(LDFLAGS) name $@ &
+	  file {vmon.obj backdoor.obj}
+	 
 # A test tool
 vmtest.exe:     vmtest.obj backdoor.obj
 	wlink system $(SYSTEM) $(LDFLAGS) name vmtest.exe &

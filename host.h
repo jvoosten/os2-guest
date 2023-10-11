@@ -43,6 +43,8 @@ class Host {
   int version() const;
   int speed() const;
   
+  void setMousePositioning (bool absolute); 
+  
   /** Gets the host pointer position */
   host_point pointer();
 
