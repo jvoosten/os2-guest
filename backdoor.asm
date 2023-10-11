@@ -2,8 +2,8 @@
 ;;   Copyright (C)2021, Rushfan
 ;;   Copyright (C)2023, Bankai Software bv
 ;;
-;;  Licensed  under the  Apache License, Version  2.0 (the "License");
-;;; you may not use this  file  except in compliance with the License.
+;;   Licensed  under the  Apache License, Version  2.0 (the "License");
+;;;  you may not use this  file  except in compliance with the License.
 ;;   You may obtain a copy of the License at                          
 ;; 
 ;;     http://www.apache.org/licenses/LICENSE-2.0
@@ -44,9 +44,9 @@ _TEXT   segment word public 'CODE'
 
 
 	
-;; int BackdoorIn(int)
-public BackdoorIn_
-BackdoorIn_	proc	near
+;; int Backdoor1(int cmd)
+public Backdoor1_
+Backdoor1_	proc	near
 	push ebx
 	push ecx
 	push edx
@@ -59,28 +59,29 @@ BackdoorIn_	proc	near
 	pop ecx
 	pop ebx
 	ret
-BackdoorIn_	endp
+Backdoor1_	endp
 	
-;; int BackdoorOut(int cmd, int func)
-public BackdoorOut_
-BackdoorOut_	proc	near
+;; int Backdoor2(int cmd, int func)
+public Backdoor2_
+Backdoor2_	proc	near
 	push ebx
 	push ecx
+	push edx
  	mov ecx, eax
 	mov ebx, edx
 	mov eax, BDOOR_MAGIC
 	mov dx, BDOOR_PORT
 	in eax, dx
+	pop edx
 	pop ecx
 	pop ebx
 	ret
-BackdoorOut_	endp
+Backdoor2_	endp
 
-;; Perform command
+;; Perform command, return all registers
 ;; void BackdoorAll(int cmd, int func, int[4] reg)
 public BackdoorAll_
 BackdoorAll_ proc near
-	push eax
 	push ebx
 	push ecx
 	push edx
@@ -104,7 +105,6 @@ BackdoorAll_ proc near
 	pop edx
 	pop ecx
 	pop ebx
-	pop eax
 	ret
 BackdoorAll_ endp
 

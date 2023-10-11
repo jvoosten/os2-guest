@@ -1,28 +1,51 @@
 /*                                                                      
- *   OS/2 Guest Tools for VMWare
+ *   OS/2 Guest tools for VMWare / ESXi
  *   Copyright (C)2021, Rushfan
+ *   Copyright (C) 2023, Bankai Software bv
  *
  *   Licensed  under the  Apache License, Version  2.0 (the "License");
  *   you may not use this  file  except in compliance with the License.
- *   You may obtain a copy of the License at                          
- *                                                                     
- *               http://www.apache.org/licenses/LICENSE-2.0           
- *                                                                     
+ *   You may obtain a copy of the License at
+ *
+ *               http://www.apache.org/licenses/LICENSE-2.0
+ *
  *   Unless  required  by  applicable  law  or agreed to  in  writing,
  *   software  distributed  under  the  License  is  distributed on an
  *   "AS IS"  BASIS, WITHOUT  WARRANTIES  OR  CONDITIONS OF ANY  KIND,
  *   either  express  or implied.  See  the  License for  the specific
  *   language governing permissions and limitations under the License.
  */
-#ifndef INCLUDED_BACKDOOR_H
-#define INCLUDED_BACKDOOR_H
+
+#pragma once
 
 #include <unistd.h>
 
 extern "C" {
-extern int BackdoorIn (int);
-extern int BackdoorOut (int, int);
-extern void BackdoorAll (int, int, int *);
+/**
+@brief Perform backdoor call with a single command
+@param cmd Command
+@return Value in eax
+*/
+extern int Backdoor1 (int cmd);
+
+/**
+@brief Perform backdoor call with command and (function) parameter
+@param cmd Command
+@param func Sub-function
+@return Value in eax
+*/
+extern int Backdoor2 (int cmd, int func);
+
+/**
+@brief Perform backdoor call with command and parameter, return all registers
+@param cmd Command
+@param func Sub-function
+@param regs Storage for all CPU registers
+
+Performs backdoor call and puts eax, ebx, ecx and edx into @p regs[0...3]
+
+*/
+extern void BackdoorAll (int cmd, int func, int regs[4]);
 
 /**
 @brief Open RPC channel to host VM
@@ -65,4 +88,3 @@ extern void BackdoorRPCClose (int channel);
 }
 
 
-#endif

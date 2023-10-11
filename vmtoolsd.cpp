@@ -14,10 +14,6 @@
  *   either  express  or implied.  See  the  License for  the specific
  *   language governing permissions and limitations under the License.
  */
-#include "guest.h"
-#include "host.h"
-#include "log.h"
-
 #include <ctype.h>
 #include <string.h>
 #include <stdint.h>
@@ -34,141 +30,63 @@
 
 #include <os2.h>
 
-// shared memory layout
-// byte 0: command
-// byte 1-15: command args
-// byte 16-255: response from command
-// commands:
-// Q : quit
-// S : Status (display stats in 16+)
-// R : Reply  (Server responded)
+#include "guest.h"
+#include "host.h"
+#include "log.h"
 
-#define NUMBER_OF_BYTES 255
-#define NAME_SEG "\\SHAREMEM\\VMTOOLS.MEM"
 
 int vmtools_daemon() 
 {
-  LOG_FUNCTION();
-  printf("Press ESCAPE to exit.\r\nStarting Daemon...\r\n");
-  char* shm = NULL;
-  APIRET rc = DosAllocSharedMem((PVOID *) &shm,
-				NAME_SEG,
-				NUMBER_OF_BYTES,
-				PAG_READ | PAG_WRITE | PAG_COMMIT);
-  if (rc != NO_ERROR) {
-    // Unable to allocate shared memory
-    logf(0, "Failed to allocate shared memory: %d\r\n", rc);
-    return 1;
-  }
+    LOG_FUNCTION();
+    
+    Host host;
+    Guest guest;
 
-  memset(shm, 0, NUMBER_OF_BYTES);
-
-  KBDKEYINFO key;
-  Host host;
-  Guest guest;
-
-  if (!host.initialize ())
-  {
-    return 1;
-  }
-  if (!guest.initialize ())
-  {
-    return 2;
-  }
-
-
-  host.setMousePositioning (true);
-  
-  host_point hp = host.pointer();
-  bool pointer_host = pointer_in_host(hp);
-  bool mouse_hidden = false;
-
-  for (;;) {
-    KbdPeek(&key, 0);
-    if (key.fbStatus != 0) 
+    if (host.getBackdoorVersion () != 6)
     {
-      APIRET krc = KbdCharIn(&key, IO_WAIT, 0);
-      logf(4, "got key: [%d]\r\n", key.chChar);
-      if (key.chChar == 27 /* ESC */) 
-      {
-	puts("Exiting...\r\n");
-	break;
-      }
+    	log (0, "Not a supported backdoor version");
+    	return 1;
+    }
+    
+    if (!guest.initialize ())
+    {
+    	log (0, "Initialization failed, exiting");
+    	return 2;
+    }
+    
+    host.announceToolsInstallation ();
+    
+    if (!host.isMouseIntegrationEnabled ())
+    {
+    	host.setMouseIntegration (true);
     }
 
-    hp = host.pointer();
-    logf(5, "pointer in host[%d], pointer_host[%d,%d]", pointer_in_host(hp), hp.x, hp.y);
-    if (pointer_in_host(hp) && !pointer_host) 
-    {
-      log(1, "pointer back in host");
-      // Moved to the host
-      pointer_host = true;
-      const char* c = guest.clipboard();
-      if (c) 
-      {
-	logf(1, "Set host clipboard: [%900s]", c);
-	host.clipboard(c);
-      }
-      // Hide mouse if it's visible.
-      if (!mouse_hidden) 
-      {
-	log(1, "mouse hidden\r\n");
-	guest.pointer_visible(false);
-        mouse_hidden = true;
-      }
-    } 
-    else if (!pointer_in_host(hp) && pointer_host) 
-    {
-      log(1, "pointer back in guest");
-      pointer_host = false;
-      if (mouse_hidden) 
-      {
-	guest.pointer_visible(true);
-	mouse_hidden = false;
-      }
-      const char *c = host.clipboard();
-      if (c) {
-	logf(3, "Set guest clipboard: [%900s]\r\n", c);
-	guest.clipboard(c);
-      }
-
-      // Set the guest pointer to match.
-      guest_point ogp = guest.pointer();
-      guest_point gp = guest.host_to_guest(hp);
-      guest.pointer(gp);
-      logf(1, "[guest] pointer moved from [%d,%d] to [%d,%d]\r\n", ogp.x, ogp.y, gp.x, gp.y);
-    } 
-    else if (!pointer_host) 
-    {
-      // Grab the current position, flip it, and send to the host.
-      guest_point gp = guest.pointer();
-      host_point hp = guest.guest_to_host(gp);
-      host.pointer(hp);
-      logf(4, "[guest]pointer[%d,%d]\r\n", gp.x, gp.y);
+    bool pointer_status = false;
+    bool old_pointer_status = false;
+    for (int i = 0; i < 100; i++) {
+    	DosSleep(100);
+    	
+    	// Whenever the mouse pointer leaves or enters the window, we 
+    	// update the clipboards of host and guest
+    	pointer_status = host.isPointerInGuest ();
+    	if (pointer_status != old_pointer_status)
+    	{
+    	    if (pointer_status)
+    	    {
+    	    	log (1, "Window enter event");
+    	    	guest.setClipboard (host.getClipboard ());
+    	    }
+    	    else
+    	    {
+    	    	log (1, "Window leave event");
+    	    	host.setClipboard (guest.getClipboard ());
+    	    }
+    	    old_pointer_status = pointer_status;
+    	}
     }
 
-    // TODO check for shutdown signal if running as a daemon.
-    if (shm != NULL)  
-    {
-      if (*shm == 'Q') 
-      {
-	// time to quit.
-	log(0, "Got signal to quit.\r\n");
-	break;
-      }
-    }
-    DosSleep(100);
-  }
-
-  if (mouse_hidden) 
-  {
-    guest.pointer_visible(true);
-  }
-  DosFreeMem(shm);
-
-  host.setMousePositioning (false);
-
-  return 0;
+    host.setMouseIntegration (false);
+    return 0;
 }
 
 int main(int argc, char* argv[]) 

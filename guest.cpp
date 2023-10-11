@@ -1,13 +1,14 @@
 /*                                                                      
- *   OS/2 Guest Tools for VMWare
+ *   OS/2 Guest tools for VMWare / ESXi
  *   Copyright (C)2021, Rushfan
+ *   Copyright (C) 2023, Bankai Software bv
  *
  *   Licensed  under the  Apache License, Version  2.0 (the "License");
  *   you may not use this  file  except in compliance with the License.
- *   You may obtain a copy of the License at                          
- *                                                                     
- *               http://www.apache.org/licenses/LICENSE-2.0           
- *                                                                     
+ *   You may obtain a copy of the License at
+ *
+ *               http://www.apache.org/licenses/LICENSE-2.0
+ *
  *   Unless  required  by  applicable  law  or agreed to  in  writing,
  *   software  distributed  under  the  License  is  distributed on an
  *   "AS IS"  BASIS, WITHOUT  WARRANTIES  OR  CONDITIONS OF ANY  KIND,
@@ -15,153 +16,113 @@
  *   language governing permissions and limitations under the License.
  */
 
-#include <stdlib.h>
-#include <string.h>
-
-#include "guest.h"
-
-#include "log.h"
-
-// Use stdint.h vs. cstdint so types are in global namespace, not std::
-#include <stdio.h>
-#include <stdint.h>
 #include <cstdlib>
 #include <cstring>
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define INCL_PM
 #define INCL_DOS
 #define INCL_ERRORS
 #include <os2.h>
 
+#include "guest.h"
+#include "log.h"
 
-Guest::Guest() {
-  PTIB ptib;
-  PPIB ppib;
-  DosGetInfoBlocks(&ptib, &ppib);
-  ppib->pib_ultype = 3;
-
-  last_point_.x = -1;
-  last_point_.y = -1;
+Guest::Guest() 
+{
+    m_hab = 0;
+    m_hmq = 0;
 }
 
 bool Guest::initialize ()
 {
-  // TODO(rushfan): Check for errors here.
-  hab_ = WinInitialize(0L);
-  if (!hab_) {
-    log(0, "Failed to create HAB\r\n");
-    return false;
-  }
-  hmq_ = WinCreateMsgQueue(hab_, 0);
-  if (!hmq_) {
-    log(0, "Failed to create HMQ\r\n");
-    return false;
-  }
+    bool ret = true;
+    m_hab = WinInitialize(0L);
+    if (!m_hab) 
+    {
+    	log(0, "[Guest] Failed to create HAB");
+    	ret = false;
+    }
+    else
+    {
+      m_hmq = WinCreateMsgQueue(m_hab, 0);
+      if (!m_hmq) 
+      {
+	log(0, "[Guest] Failed to create HMQ");
+    	ret = false;
+      }
+    }
+    
+    /* Create codepage conversion objects */
+    int rc = UniCreateUconvObject ((UniChar *)L"", &m_local_ucs);
+    if (rc != ULS_SUCCESS)
+    {
+    	log (0, "[Guest] Failed to create local UniConv object");
+    	ret = false;
+    }
+    rc = UniCreateUconvObject ((UniChar *)L" IBM-1208" , &m_utf8_ucs);
+    if (rc != ULS_SUCCESS)
+    {
+    	log (0, "[Guest] Failed to create UTF-8 UniConv object");
+    	ret = false;
+    }
+    
+    return ret;
+}
 
-  screen_max_y_ = WinQuerySysValue(HWND_DESKTOP, SV_CYSCREEN);
-  logf(2, "Screen size max y: [%d]\r\n", screen_max_y_);
+Guest::~Guest() 
+{
+    // Cleanup
+    UniFreeUconvObject (m_local_ucs);
+    UniFreeUconvObject (m_utf8_ucs);
+    WinDestroyMsgQueue(m_hmq);
+    WinTerminate(m_hab);
+}
+
   
-  /* Create codepage conversion objects */
-  int ret = UniCreateUconvObject ((UniChar *)L"", &local_ucs);
-  if (ret != ULS_SUCCESS)
-  {
-     log (0, "Failed to create local UniConv object\r\n");
-     return false;
-  }
-  ret = UniCreateUconvObject ((UniChar *)L" IBM-1208" , &utf8_ucs);
-  if (ret != ULS_SUCCESS)
-  {
-     log (0, "Failed to create UTF-8 UniConv object\r\n");
-     return false;
-  }
-  
-  return true;
-}
 
-Guest::~Guest() {
-  // Cleanup
-  UniFreeUconvObject (local_ucs);
-  UniFreeUconvObject (utf8_ucs);
-  WinDestroyMsgQueue(hmq_);
-  WinTerminate(hab_);
-}
-
-  
-/** Gets the guest pointer position */
-guest_point Guest::pointer() {
-  POINTL pos;
-  WinQueryPointerPos(HWND_DESKTOP, &pos);
-
-  guest_point guest_pos;
-  guest_pos.x = pos.x;
-  guest_pos.y = pos.y;
-
-  if (last_point_.x != pos.x && last_point_.y != pos.y) {
-    logf(1, "new pos: [%d, %d]; old: [%d,%d]", pos.x, pos.y, last_point_.x, last_point_.y);
-    last_point_.x = pos.x;
-    last_point_.y = pos.y;
-  } else {
-    logf(4, "remaining at last point: [%d, %d]", pos.x, pos.y);
-  }
-
-  return guest_pos;
-}
-
-
-/** Sets the guest pointer position */
-bool Guest::pointer(const guest_point& pos) {
-  if (!WinSetPointerPos(HWND_DESKTOP, pos.x, pos.y)) {
-    logf(0, "failed to set pointer pos: %d", WinGetLastError(hab_));
-  }
-  if (last_point_.x != pos.x && last_point_.y != pos.y) {
-    logf(1, "new pos: [%d, %d]; old: [%d,%d]", pos.x, pos.y, last_point_.x, last_point_.y);
-    last_point_.x = pos.x;
-    last_point_.y = pos.y;
-  } else {
-    logf(4, "remaining at last point: [%d, %d]", pos.x, pos.y);
-  }
-  return true;
-}
-
-bool Guest::pointer_visible(bool visible) {
-  logf(1, "Guest::pointer_visible(%s)", visible ? "true": "false");
-  WinShowPointer(HWND_DESKTOP, visible ? TRUE : FALSE);
-  return true;
-}
 
 /**
- \brief Sets the guest clipboard contents or releases b if that fails. 
- \param b Input string in UTF-8 format 
- \return True upon success, false otherwise
+ \brief Sets the guest clipboard contents  
+ \param str Input string in UTF-8 format 
  
- Does internal conversion to current codepage
+ Sets the clipboard if it is different from the current one. 
  
  */
-bool Guest::clipboard(const char* b) {
+ void Guest::setClipboard (const std::string &str) 
+{
   LOG_FUNCTION ();
-  bool ret = true;
+  
+  if (str == m_oldClipboard)
+  {
+      return;
+  }
   
   int rc = 0;
-  int len = strlen (b);
+  int len = str.size ();
+  const char *buf = str.c_str();
   UniChar *utmp = NULL; 
-  if (WinOpenClipbrd(hab_)) 
+  if (WinOpenClipbrd(m_hab)) 
   {
-    log (3, "opened clipboard");
-    WinEmptyClipbrd(hab_);
+    log (3, "[Guest::setClipboard] Opened clipboard");
+    WinEmptyClipbrd(m_hab);
     
-    logf (3, "input length = %d\r\n", len);
+    logf (2, "[Guest::setClipboard] Input length = %d", len);
     // Do all the stuff to convert to the local codepage; first to UCS, then local
     utmp = (UniChar *)malloc (2 * len + 10); // Probably overkill if we get lots of 3-byte UTF-8 bytes in
     if (!utmp)
     {
-      log (0, "Failed to allocate memory for conversion\r\n");
+      log (0, "[Guest::setClipboard] Failed to allocate memory for conversion");
     }
     else
     {
-      rc = UniStrToUcs (utf8_ucs, utmp, (char *)b, len + 1); // Len + 1 for the terminating byte
+      rc = UniStrToUcs (m_utf8_ucs, utmp, (char *)buf, len + 1); // Len + 1 for the terminating byte
       if (rc != ULS_SUCCESS)
       {
-	logf (0, "Conversion to UCS failed: 0x%x\r\n", rc);
+	logf (0, "[Guest::setClipboard]Conversion to UCS failed: 0x%x", rc);
       }
       else
       {
@@ -172,166 +133,127 @@ bool Guest::clipboard(const char* b) {
 			       PAG_COMMIT | PAG_WRITE | OBJ_GIVEABLE);
 	if (rc != NO_ERROR)
 	{
-	  log (0, "Failed to allocate shared memory for guest clipboard.");
+	  log (0, "[Guest::setClipboard] Failed to allocate shared memory for guest clipboard.");
 	}
 	else
 	{
-	  rc = UniStrFromUcs (local_ucs, buf, utmp, len);
+	  rc = UniStrFromUcs (m_local_ucs, buf, utmp, len);
 	  if (rc != ULS_SUCCESS)
 	  {
-	    log (0, "Conversion to local codepage failed\r\n");
+	    log (0, "[Guest::setClipboard] Conversion to local codepage failed");
 	    DosFreeMem (buf);
 	  }
 	  else
 	  {
 	    // Finally! Set the clipboard
-	    WinSetClipbrdData(hab_, (ULONG) buf, CF_TEXT, CFI_POINTER);
+	    WinSetClipbrdData(m_hab, (ULONG) buf, CF_TEXT, CFI_POINTER);
+	    log (2, "[Guest::setClipboard] Text pasted into clipboard"); 
 	  }
 	}
       }
     }
-    WinCloseClipbrd(hab_);
+    WinCloseClipbrd(m_hab);
   }
   else
   {
-    log(0, "Failed to open Clipboard");
-    ret = false;
+    log(0, "[Guest::setClipboard] Failed to open clipboard");
   }
   
   free ((void *)utmp);
-  free ((void *)b);
-  
-  return ret;
+  m_oldClipboard = str;
 }
 
 
 /** 
-\brief Gets the guest clipboard contents or NULL if none exist 
+\brief Gets the guest clipboard contents  
 \return A string in UTF-8 encoding
 
 The text is internally transformed from the current codepage to UTF-8.
 Also CR/LF pairs are converted to single LF's, Unix style.
 
 */
-const char *Guest::clipboard() {
-  LOG_FUNCTION();
-  if (!WinOpenClipbrd(hab_)) {
-    log(2, "Failed to open Clipboard");
-    return NULL;
-  }
+std::string Guest::getClipboard () 
+{
+    LOG_FUNCTION();
+
+    std::string ret;
+    if (!WinOpenClipbrd(m_hab)) 
+    {
+    	log (0, "[Guest::getClipboard] Failed to open Clipboard");
+    	m_oldClipboard = "";
+    	return ret;
+    }
   
-  const char *ret = NULL;
-  log(2, "WinOpenClipbrd: succeed");
-  ULONG fmtInfo = 0;
-  if (WinQueryClipbrdFmtInfo(hab_, CF_TEXT, &fmtInfo)) 
-  {
-    log(3, "Has text in clipboard");
-    const char *org = (const char *)WinQueryClipbrdData(hab_, CF_TEXT);
+    log (3, "[Guest::getClipboard] WinOpenClipbrd: success");
+    ULONG fmtInfo = 0;
+    if (!WinQueryClipbrdFmtInfo(m_hab, CF_TEXT, &fmtInfo)) 
+    {
+    	log (2, "[Guest::getClipboard] No text in clipboard\n");
+    	m_oldClipboard = "";
+    	return ret;
+    }
+    
+    const char *org = (const char *)WinQueryClipbrdData (m_hab, CF_TEXT);
     if (org) 
     {
-      int rc = 0;
-      int len = 0;
-      char *copy = NULL;
-      UniChar *utmp = NULL;
-      
-      len = strlen (org);
-      copy = (char *) malloc (len * 3 + 10); // Allocate enough for the output UTF-8 string
-      utmp = (UniChar *) malloc (len * 2 + 10); // Intermediate UCS-2 buffer
-      if (!copy || !utmp)
-      {
-	log (1, "Failed to allocate memory for conversion\r\n");
-      }
-      else
-      {
-	// Step one: convert 0D/0A to just 0A for copy/paste
-	const char *s = org;
-	char *d = copy;
-	while (*s)
+	int rc = 0;
+	int len = 0;
+	char *copy = NULL;
+	UniChar *utmp = NULL;
+	    
+	len = strlen (org);
+	copy = (char *) malloc (len * 3 + 10); // Allocate enough for the output UTF-8 string
+	utmp = (UniChar *) malloc (len * 2 + 10); // Intermediate UCS-2 buffer
+	if (!copy || !utmp)
 	{
-	  if (*s != '\r')
-	  {
-	    *d = *s;
-	    d++;
-	  }
-	  s++;
-	}
-	*d = '\0'; // Finish string
-	
-	// Step two: convert to UCS-2
-	rc = UniStrToUcs (local_ucs, utmp, copy, len + 1); // Len + 1 for null byte?
-	if (rc != ULS_SUCCESS)
-	{
-	  log (0, "Failed conversion to UCS\r\n");
+	    log (0, "[Guest::getClipboard] Failed to allocate memory for conversion\n");
 	}
 	else
 	{
-	  // Step 3: back to UTF, into the 'copy'  buffer
-	  rc = UniStrFromUcs (utf8_ucs, copy, utmp, len * 3);
-	  if (rc != ULS_SUCCESS)
-	  {
-	    log (0, "Failed conversion to UTF-8\r\n");
-	  }
-	  else
-	  {
-	    ret = copy;
-	  }
+	    // Step one: convert 0D/0A to just 0A for copy/paste
+	    const char *s = org;
+	    char *d = copy;
+	    while (*s)
+	    {
+		if (*s != '\r')
+		{
+		    *d = *s;
+		    d++;
+		}
+		s++;
+	    }
+	    *d = '\0'; // Finish string
+	
+	    // Step two: convert to UCS-2
+	    rc = UniStrToUcs (m_local_ucs, utmp, copy, len + 1); // Len + 1 for null byte?
+	    if (rc != ULS_SUCCESS)
+	    {
+	    	log (1, "[Guest::getClipboard] Failed conversion to UCS");
+	    }
+	    else
+	    {
+		// Step 3: back to UTF, into the 'copy'  buffer
+		rc = UniStrFromUcs (m_utf8_ucs, copy, utmp, len * 3);
+		if (rc != ULS_SUCCESS)
+		{
+		    log (1, "[Guest::getClipboard] Failed conversion to UTF-8");
+		}
+		else
+		{
+		    ret = copy;
+		    log (2, "[Guest::getClipboard] Contents assigned");
+		}
+	    }
 	}
-      }
 
-#if 0
-      // Some hexprint debug
-      char buf[250];
-      s = ret;
-      d = buf;
-      int count = 0;
-      buf[0] = '\0';
-      while (*s)
-      {
-	d += sprintf (d, "%02x ", (int)(*s));
-	s++;
-	len--;
-	count++;
-	if (count == 16)
-	{
-	  log (3, buf);
-	  count = 0;
-	  d = buf;
-	}
-      }
-      if (count > 0)
-      {
-	log (3, buf);
-      }
-#endif
-      
-      log(1, "contents assigned");
-      free (utmp);
-      if (!ret)
-      {
-        free (copy);
-      }
+	free (utmp);
     }
-  }
-  log(4, "Closing Clipboard");
-  WinCloseClipbrd(hab_);
-  return ret;
+
+    log (3, "[Guest::getClipboard] Closing clipboard");
+    WinCloseClipbrd(m_hab);
+    return ret;
 }
 
-guest_point Guest::host_to_guest(const host_point& hp) {
-  guest_point r;
-  r.x = hp.x;
-  r.y = screen_max_y_ - hp.y;
-  
-  return r;
-}
-
-host_point Guest::guest_to_host(const guest_point& gp) {
-  host_point r;
-  r.x = gp.x;
-  r.y = screen_max_y_ - gp.y;
-
-  return r;
-}
 
 
 

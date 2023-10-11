@@ -1,235 +1,316 @@
 /*                                                                      
- *   OS/2 Guest Tools for VMWare
+ *   OS/2 Guest tools for VMWare / ESXi
  *   Copyright (C)2021, Rushfan
+ *   Copyright (C) 2023, Bankai Software bv
  *
  *   Licensed  under the  Apache License, Version  2.0 (the "License");
  *   you may not use this  file  except in compliance with the License.
- *   You may obtain a copy of the License at                          
- *                                                                     
- *               http://www.apache.org/licenses/LICENSE-2.0           
- *                                                                     
+ *   You may obtain a copy of the License at
+ *
+ *               http://www.apache.org/licenses/LICENSE-2.0
+ *
  *   Unless  required  by  applicable  law  or agreed to  in  writing,
  *   software  distributed  under  the  License  is  distributed on an
  *   "AS IS"  BASIS, WITHOUT  WARRANTIES  OR  CONDITIONS OF ANY  KIND,
  *   either  express  or implied.  See  the  License for  the specific
  *   language governing permissions and limitations under the License.
  */
-#include "host.h"
-#include "backdoor.h"
-#include "log.h"
 
-// Use stdint.h vs. cstdint so types are in global namespace, not std::
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 
+#define INCL_DOSDEVICES
 #define INCL_DOSPROCESS
 #define INCL_ERRORS
 #include <os2.h>
 
+#include "backdoor.h"
+#include "host.h"
+#include "log.h"
 
-/* From https://sites.google.com/site/chitchatvmback/backdoor
-   =========================================================================================
-   02h	APM function	                Y	Y	Y	Y *1	Y *1	Y	Y *1
-   04h	Get mouse cursor position	Y	Y	Y	Y	Y	Y	Y
-   05h	Set mouse cursor position	Y	Y	Y	Y	Y	Y	Y
-   06h	Get text length from clipboard	Y	Y	Y	Y	Y	Y	Y
-   07h	Get text from clipboard	        Y	Y	Y	Y	Y	Y	Y
-   08h	Set text length to clipboard	Y	Y	Y	Y	Y	Y	Y
-   09h	Set text to clipboard	        Y	Y	Y	Y	Y	Y	Y
-   =========================================================================================
-   ECX gets command
-   EBX gets optional params
-*/
+
 
 #define BACKDOOR_CMD_SPEED              0x01
 #define BACKDOOR_CMD_GET_MOUSE_POS      0x04
-#define BACKDOOR_CMD_SET_MOUSE_POS      0x05
 #define BACKDOOR_CMD_GET_CLIPBOARD_LEN  0x06
 #define BACKDOOR_CMD_GET_CLIPBOARD_TEXT 0x07
 #define BACKDOOR_CMD_SET_CLIPBOARD_LEN  0x08
 #define BACKDOOR_CMD_SET_CLIPBOARD_TEXT 0x09
 #define BACKDOOR_CMD_GET_VERSION        0x0A
-#define BACKDOOR_CMD_GET_GUI_OPTIONS    0x0D
-#define BACKDOOR_CMD_SET_GUI_OPTIONS    0x0E
 
-#define BACKDOOR_CMD_ABSPOINTER_DATA    0x27
-#define BACKDOOR_CMD_ABSPOINTER_STATUS  0x28
-#define BACKDOOR_CMD_ABSPOINTER_COMMAND 0x29
-  #define ABSPOINTER_ENABLE             0x45414552
-  #define ABSPOINTER_DISABLE            0x0000005F
-  #define ABSPOINTER_RELATIVE           0x4c455252
-  #define ABSPOINTER_ABSOLUTE           0x53424152
 
-void set_host_clipboard(const char *buf, uint32_t len) {
-  LOG_FUNCTION();
-  if (!buf) {
-    return;
-  }
-  //fprintf(stdout, "set_host_clipboard: len: %d; buf: '%s'", len, buf); fflush(stdout);
-  BackdoorOut(BACKDOOR_CMD_SET_CLIPBOARD_LEN, len);
-  const uint32_t* p = (const uint32_t*) buf;
-  for (int i = 0; i < len; i += sizeof(uint32_t)) {
-    //fprintf(stdout, "set_host_clipboard_text_piece: %d/%d [%c]\r\n", i, len, (char*) *p); fflush(stdout);
-    BackdoorOut(BACKDOOR_CMD_SET_CLIPBOARD_TEXT, *p++);
-  }
-  free( (void *)buf);
-}
+/**
+@brief Constructor
 
-static const int16_t XPOS_IN_HOST = -100;
-
-bool pointer_in_host(const host_point& pos) {
-  return pos.x == XPOS_IN_HOST;
-}
-
-Host::Host() 
-  : m_version (0), m_speed (0)
+*/
+Host::Host ()
 {
+    m_mouseHandle = -1;
 }
 
-Host::~Host() {}
-
-bool Host::initialize ()
+Host::~Host ()
 {
-   // Get version number; note that there is additional info in the ECX register 
-   // that we don't get here.
-   m_version = BackdoorIn (BACKDOOR_CMD_GET_VERSION);
-   logf (1, "Version of host platform: %d" , m_version);
-   if (m_version != 6)
-   {
-     log (0, "Incompatible host platform");
-     return false;
-   }
-   
-   m_speed = BackdoorIn (BACKDOOR_CMD_SPEED);
-   logf (1, "CPU speed: %d", m_speed);
-   m_gui_options = BackdoorIn (BACKDOOR_CMD_GET_GUI_OPTIONS);
-   log (1, "GUI options from Host:");
-   if (m_gui_options & 0x01)
-   {
-     log (1, "  Grab cursor when it enters window"); 
-   }
-   if (m_gui_options & 0x02)
-   {
-     log (1, "  Ungrab cursor when it leaves window");
-   }
-   if (m_gui_options & 0x04)
-   {
-     log (1, "  Scroll when cursor approaches edge");
-   }
-   if (m_gui_options & 0x10)
-   {
-     log (1, "  Copy and paste between host and guest");
-   }
-   if (m_gui_options & 0x40)
-   {
-     log (1, "  Indicates if it runs in fullscreen");
-   }
-   if (m_gui_options & 0x80)
-   {
-     log (1, "  Switch to fullscreen");
-   }
-   if (m_gui_options & 0x500)
-   {
-     log (1, "  Time synchronized between host and guest");
-   }
-
-   return true;
+    closeMouseDriver ();
 }
 
-
-int Host::version() const
+/**
+@brief Get VMWare / ESXi backdoor verion
+@return Integer value; should be '6' for now
+*/
+int Host::getBackdoorVersion () const
 {
-  return m_version;
-}
-
-int Host::speed () const
-{
-  return m_speed;
+    return Backdoor1 (BACKDOOR_CMD_GET_VERSION);
 }
 
 
 /**
-\brief Set absolute or relative mouse positioning
-\bool absolute When true, set mouse to absolute positioning by VM; otherwise relative
+@brief Tell VMWare / ESXi we have integration
+
+Does an RPC call with a version indicating self-managed software.
 */
-
-
-void Host::setMousePositioning (bool absolute)
+void Host::announceToolsInstallation()
 {
-  if (absolute)
+  int rpc, len, reply_id;
+  const int buf_len = 1000;
+  char buf[buf_len];
+
+  rpc = BackdoorRPCOpen ();
+  if (rpc < 0)
   {
-    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_COMMAND, ABSPOINTER_ENABLE);
-    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_STATUS, 0);
-    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_DATA, 1);
-    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_COMMAND, ABSPOINTER_ABSOLUTE);
+    log (1, "Failed to open RPC channel.");
+    return;
+  }
+
+  logf (2, "Opened RPC channel %d.", rpc);
+  len = BackdoorRPCSend (rpc, "tools.set.version 2147483647", &reply_id);
+  if (len < 0)
+  {
+    logf (1, "Error from RPC: %d", len);
   }
   else
   {
-    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_COMMAND, ABSPOINTER_RELATIVE);
-    BackdoorOut (BACKDOOR_CMD_ABSPOINTER_COMMAND, ABSPOINTER_DISABLE);
+    if (len < buf_len)
+    {
+      if (BackdoorRPCReceive (rpc, buf, len, reply_id) < 0)
+      {
+	log (1, "Receiving of reply failed.");
+      }
+      else
+      {
+	buf[len] = '\0';
+	logf (2, "Received reply from RPC: %s", buf);
+      }
+    }
+    else
+    {
+      logf (1, "Reply too big (%d)", len);
+    }
   }
-}
-
-
-
-host_point Host::pointer() {
-  host_point pos;
   
-  uint32_t i = BackdoorIn(BACKDOOR_CMD_GET_MOUSE_POS);
-  pos.x = i >> 16;
-  pos.y = i & 0xffff;
-  return pos;
-}
-
-bool Host::pointer(const host_point& pos) {
-  uint32_t d = (pos.x << 16) | pos.y;
-  BackdoorOut(BACKDOOR_CMD_SET_MOUSE_POS, d);
-  return true;
-}
-
-bool Host::clipboard(const char *b) {
-  LOG_FUNCTION();
-  if (!b) {
-    return false;
-  }
-  int len = strlen(b);
-  set_host_clipboard(b, len);
-  return true;
+  BackdoorRPCClose (rpc);
+  log (2, "Closed RPC channel");
 }
 
 /**
-\brief Get clipboard from host
-\return an UTF-8 encoded string or NULL if there was no data
+@brief Check for mouse integration with mouse driver
+@return True if mouse integration is enabled
 
-Note: the returned string must be freed later.
+Probes the mouse driver for ESX mouse integration, and if enabled returns true.
+
 */
-const char *Host::clipboard() 
+bool Host::isMouseIntegrationEnabled ()
 {
-  LOG_FUNCTION();
-  int32_t len = BackdoorIn (BACKDOOR_CMD_GET_CLIPBOARD_LEN);
-  if (len <= 0) {
-    log(1, "failed to get clipboard length from host\r\n");
-    return NULL;
-  }
-  char *buf = (char *)malloc (len * sizeof (int32_t) + 10);
-  if (!buf)
-  {
-    log(1, "Memory allocation failed\r\n");
-    return NULL;
-  }
+    if (!openMouseDriver())
+    {
+    	return false;
+    }
+    
+    bool ret = false;
+    // Ioctl variables
+    ULONG category = 7; // mouse functions
+    ULONG function = 0x7E; // Our ioctl function
+    uint16_t my_data[3] = {0};
+    ULONG data_len = 6;
+    
+    int rc = DosDevIOCtl (m_mouseHandle, category, function,
+	NULL, 0, NULL,           		// Parameters (none)
+	my_data, 6, &data_len); 		// Data (3 words, only first one is used)
+    if (rc == NO_ERROR)
+    {
+    	logf (2, "Queried mouse integration: %04x", my_data[0]);
+    	// bit 15 is ESX detection, bit 0 is absolute mouse position enabled
+	if (my_data[0] & 0x0001)
+	{
+	    ret = true;
+	}
+    }
+    
+    closeMouseDriver ();
+    return ret;
+}
 
-   // The buffer is read 4 bytes at a time.
-   uint32_t *current = (uint32_t *)buf;
-   len = (len + sizeof (uint32_t) - 1) / sizeof (uint32_t);
-   while (len > 0)
-   {
-      *current = BackdoorIn(BACKDOOR_CMD_GET_CLIPBOARD_TEXT);
-      current++;
-      len--;
-   }
 
-   return buf;
+void Host::setMouseIntegration (bool on_off)
+{
+    if (!openMouseDriver())
+    {
+    	return;
+    }
+    
+    logf (2, "[Host::setMouseIntegration] -> %s", on_off ? "on" : "off");
+    
+    // Ioctl variables
+    ULONG category = 7; // mouse functions
+    ULONG function = 0x7F; // Our ioctl function
+    uint16_t my_param = 0;
+    ULONG param_len = 2;
+    
+    my_param = on_off ? 1 : 0;  // Proper command to turn integration on or off
+    int rc = DosDevIOCtl (m_mouseHandle, category, function,
+	&my_param, 2, &param_len,       // Parameters (1 word)
+	NULL, 0, NULL);  		// Data (none)
+    if (rc != NO_ERROR)
+    {
+    	logf (1, "[Host::setMouseIntegration] Failed to set mouse integration, error code = %d", rc);
+    }
+    
+    closeMouseDriver ();
+}
+
+
+/**
+@brief Check if mouse pointer is inside the guest window
+@return True if pointer is inside
+
+Performs a backdoor call to get the mouse pointer; coordinates of
+-100, -100 indicate 'out of window', but we simply check for positive
+coordinates.
+
+*/
+bool Host::isPointerInGuest () const
+{
+    int32_t i = Backdoor1 (BACKDOOR_CMD_GET_MOUSE_POS);
+    logf (3, "[Host::isPointerInGuest] Pointer pos: %x" , i);
+    int32_t x = i >> 16;
+    int32_t y = i & 0xffff;
+    return (x >= 0 && y >= 0);
+}
+
+
+/**
+@brief Return the clipboard contents from the host
+@return String with contents in UTF-8
+
+Note that the default encoding for VMWare / ESXi is UTF-8.
+*/
+
+std::string Host::getClipboard ()
+{
+    LOG_FUNCTION();
+
+    std::string ret;
+
+    int len = Backdoor1 (BACKDOOR_CMD_GET_CLIPBOARD_LEN);
+    if (len <= 0) {
+    	log (1, "[Host::getClipboard] Failed to get clipboard length");
+       return ret;
+    }
+  
+    char *buf = (char *) malloc (len * sizeof (int32_t) + 10);
+    if (!buf)
+    {
+    	log (0, "[Host::getClipboard] Memory allocation failed");
+    	return ret;
+    }
+
+    // The buffer is read 4 bytes at a time.
+    uint32_t *p = (uint32_t *)buf;
+    int count = (len + sizeof (uint32_t) - 1) / sizeof (uint32_t);
+    while (count > 0)
+    {
+        *p++ = Backdoor1(BACKDOOR_CMD_GET_CLIPBOARD_TEXT);
+        count--;
+    }
+    logf (2, "[Host::getClipboard] Got %d bytes in clipboard", len);
+   
+    ret.assign (buf, len); 
+    free (buf);
+    m_oldClipboard = ret;
+    return ret;
+}
+
+
+/**
+@brief Set the host clipboard
+@param str Contents; should be in UTF-8 encoding
+
+Sets the host clipboard if the new content is different from the existing
+clipboard. 
+
+*/
+void Host::setClipboard (const std::string &str)
+{
+    LOG_FUNCTION();
+  
+    if (str == m_oldClipboard)
+    {
+    	return;
+    }
+    
+    int len = str.size();
+    logf (2, "[Host::setClipboard] Pushing %d bytes", len);
+    int rc = Backdoor2 (BACKDOOR_CMD_SET_CLIPBOARD_LEN, len);
+    logf (2, "rc = %d" , rc);
+    const uint32_t* p = (const uint32_t*) str.c_str();
+    for (int i = 0; i < len; i += sizeof(uint32_t)) 
+    {
+      Backdoor2 (BACKDOOR_CMD_SET_CLIPBOARD_TEXT, *p++);
+    }
+}
+
+
+bool Host::openMouseDriver()
+{
+    if (m_mouseHandle != -1)
+    {
+    	return true;
+    }
+  
+    log (1, "[Host] Opening mouse driver");
+    ULONG action = 0;
+    ULONG size = 0;
+    ULONG attribute = FILE_NORMAL;
+    ULONG open_flags = FILE_OPEN;
+    ULONG open_mode = OPEN_SHARE_DENYNONE | OPEN_FLAGS_FAIL_ON_ERROR | OPEN_ACCESS_READWRITE;
+    APIRET rc = NO_ERROR;
+  
+    // Open the device to the driver */
+    rc = DosOpen("MOUSE$", &m_mouseHandle, &action, 
+	size, 
+	attribute,
+	open_flags,
+	open_mode,
+	(PEAOP2)NULL);
+    
+    if (rc != NO_ERROR)
+    {
+    	logf (0, "[Host] Failed to open MOUSE$ driver: rc = %d", rc);
+    	return false;
+    }
+
+    return true;
+}
+
+
+void Host::closeMouseDriver ()
+{
+    if (m_mouseHandle != -1)
+    {
+    	log (1, "[Host] Closing mouse driver");
+    	DosClose (m_mouseHandle);
+    	m_mouseHandle = -1;
+    }
 }
 

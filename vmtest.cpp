@@ -277,9 +277,10 @@ int set_ioctl()
 
 int main(int arg, char *argv[])
 {
-  printf ("CPU speed = %d.\n" , BackdoorIn (1));	
-  printf ("VMWare backdoor version = %d.\n" , BackdoorIn (10));	
+  printf ("CPU speed = %d.\n" , Backdoor1 (1));	
+  printf ("VMWare backdoor version = %d.\n" , Backdoor1 (10));	
 
+  send_something_rpc();
   set_ioctl();
   
   return 0;

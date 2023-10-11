@@ -2,12 +2,12 @@
 # Makefile: OS/2 Guest Tools for VMWare
 #
 
-VERSION = 1.0
+VERSION = 2.0
 CC 	= wcl386
 AS 	= wasm
 
 # debug info and warning level 3
-CFLAGS		= -d3 -w3
+CFLAGS		= -d3 -w3 -xs
 ASFLAGS 	= -d3
 LDFLAGS 	= debug all
 SYSTEM		= os2v2
@@ -20,11 +20,6 @@ VMTOOLSD_OBJS	= backdoor.obj	&
 		guest.obj 	&
 		host.obj 	&
 		vmtoolsd.obj
-
-# Binary and Objects for vmtoolsd
-VMTOOLSCTL_EXE	= vmtoolsctl.exe
-VMTOOLSCTL_OBJS = log.obj	&
-		vmtoolsctl.obj
 
 #########################################################
 # Makefile rules 
@@ -41,13 +36,9 @@ all:	config.h $(VMTOOLSD_EXE) $(VMTOOLSCTL_EXE) vmtest.exe vmon.exe vmoff.exe
 config.h: config.h.in 
 	sed s/@VMTOOLS_VERSION@/$(VERSION)/ $< > $@
 
-$(VMTOOLSD_EXE): config.h $(VMTOOLSD_OBJS)
-	wlink system $(SYSTEM_PM) $(LDFLAGS) name $(VMTOOLSD_EXE) &
+vmtoolsd.exe: config.h $(VMTOOLSD_OBJS)
+	wlink system $(SYSTEM_PM) $(LDFLAGS) name $@ &
 	 file {$(VMTOOLSD_OBJS)} library libconv
-
-$(VMTOOLSCTL_EXE): config.h $(VMTOOLSCTL_OBJS)
-	wlink system $(SYSTEM) $(LDFLAGS) name $(VMTOOLSCTL_EXE) &
-	 file {$(VMTOOLSCTL_OBJS)}
 
 vmoff.exe:	vmoff.obj backdoor.obj
 	wlink system $(SYSTEM) $(LDFLAGS) name $@ &
@@ -89,5 +80,6 @@ clean: .SYMBOLIC
 	-rm -fr $(DIST_DIR)
 	-del $(DIST_ZIP)
 
+# host.obj: host.cpp host.h backdoor.h
 
 

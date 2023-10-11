@@ -1,76 +1,52 @@
 /*                                                                      
- *   OS/2 Guest Tools for VMWare
+ *   OS/2 Guest tools for VMWare / ESXi
  *   Copyright (C)2021, Rushfan
+ *   Copyright (C) 2023, Bankai Software bv
  *
  *   Licensed  under the  Apache License, Version  2.0 (the "License");
  *   you may not use this  file  except in compliance with the License.
- *   You may obtain a copy of the License at                          
- *                                                                     
- *               http://www.apache.org/licenses/LICENSE-2.0           
- *                                                                     
+ *   You may obtain a copy of the License at
+ *
+ *               http://www.apache.org/licenses/LICENSE-2.0
+ *
  *   Unless  required  by  applicable  law  or agreed to  in  writing,
  *   software  distributed  under  the  License  is  distributed on an
  *   "AS IS"  BASIS, WITHOUT  WARRANTIES  OR  CONDITIONS OF ANY  KIND,
  *   either  express  or implied.  See  the  License for  the specific
  *   language governing permissions and limitations under the License.
  */
-#ifndef INCLUDED_GUEST_H
-#define INCLUDED_GUEST_H
 
+#pragma once
+
+#include <string>
 #include <uconv.h>
 
-
-#include "host.h"
-
 /**
- * Represents a point on the Host, in the format of the host operating
- * system.
+ * Class to encapsulate interfacing with the local Guest OS
  */
-struct guest_point {
-  int16_t x;
-  int16_t y;
-};
-
-/**
- * Class to encapsulate interfacing with a VMWare Guest.
- */
-class Guest {
- public:
-  Guest();
-  ~Guest();
+class Guest 
+{
+public:
+    Guest();
+    ~Guest();
+    
+    bool initialize ();
+    
+    // Gets the guest clipboard contents
+    std::string getClipboard ();
+    
+    // Sets the guest clipboard contents
+    void setClipboard (const std::string &str);
+    
+private:
+    unsigned long m_hab;
+    unsigned long m_hmq;
   
-  bool initialize ();
-  
-  /** Gets the guest pointer position */
-  guest_point pointer();
-
-  /** Sets the guest pointer position */
-  bool pointer(const guest_point& pos);
-
-  /** Shows or hides the pointer  */
-  bool pointer_visible(bool visible);
-
-  /** Sets the guest clipboard contents */
-  bool clipboard (const char *b);
-
-  /** Gets the guest clipboard contents or NULL if none exist */
-  const char *clipboard();
-
-  /** converts a host to guest point */
-  guest_point host_to_guest(const host_point& hp);
-
-  /** converts a host to guest point */
-  host_point guest_to_host(const guest_point& gp);
-
- private:
-  unsigned long hab_;
-  unsigned long hmq_;
-  unsigned long screen_max_y_;
-  guest_point last_point_;
-  
-  /* For conversion of local strings to UTF8 for the external clipboard */
-  UconvObject local_ucs, utf8_ucs;
+    std::string m_oldClipboard;
+    
+    /// For conversion of local strings to UTF8 for the external clipboard
+    UconvObject m_local_ucs, m_utf8_ucs;
 };
 
 
-#endif
+
