@@ -201,12 +201,13 @@ bool Host::isPointerInGuest () const
 
 /**
 @brief Return the clipboard contents from the host
-@return String with contents in UTF-8
+@param str String with contents in UTF-8
+@return True if something was found in the clipboard.
 
 Note that the default encoding for VMWare / ESXi is UTF-8.
 */
 
-std::string Host::getClipboard ()
+bool Host::getClipboard (std::string &str)
 {
     LOG_FUNCTION();
 
@@ -216,34 +217,38 @@ std::string Host::getClipboard ()
     if (len < 0) 
     {
     	log (1, "[Host::getClipboard] Failed to get clipboard length");
+    	return false;
     } 
-    // 0 means empty clipboard
-    else if (len > 0)
+    if (len == 0) // Not sure if this can ever happen
     {
-	char *buf = (char *) malloc (len * sizeof (int32_t) + 10);
-	if (!buf)
+    	ret = "";
+    	return true;
+    }
+    
+    char *buf = (char *) malloc (len * sizeof (int32_t) + 10);
+    if (!buf)
+    {
+	log (0, "[Host::getClipboard] Memory allocation failed");
+    }
+    else
+    {
+	// The buffer is read 4 bytes at a time.
+	uint32_t *p = (uint32_t *)buf;
+	int count = (len + sizeof (uint32_t) - 1) / sizeof (uint32_t);
+	while (count > 0)
 	{
-	    log (0, "[Host::getClipboard] Memory allocation failed");
+	    *p++ = Backdoor1(BACKDOOR_CMD_GET_CLIPBOARD_TEXT);
+	    count--;
 	}
-	else
-	{
-	    // The buffer is read 4 bytes at a time.
-	    uint32_t *p = (uint32_t *)buf;
-	    int count = (len + sizeof (uint32_t) - 1) / sizeof (uint32_t);
-	    while (count > 0)
-	    {
-		*p++ = Backdoor1(BACKDOOR_CMD_GET_CLIPBOARD_TEXT);
-		count--;
-	    }
-	    logf (2, "[Host::getClipboard] Got %d bytes in clipboard", len);
-	   
-	    ret.assign (buf, len); 
-	    free (buf);
-	}
+	logf (2, "[Host::getClipboard] Got %d bytes in clipboard", len);
+       
+	ret.assign (buf, len); 
+	free (buf);
     }
     
     m_oldClipboard = ret;
-    return ret;
+    str = ret;
+    return true;
 }
 
 

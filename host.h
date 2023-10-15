@@ -46,7 +46,7 @@ public:
     bool isPointerInGuest () const;
 
     // Get clipboard from host
-    std::string getClipboard ();
+    bool getClipboard (std::string &str);
 
     // Set clipboard in host
     void setClipboard (const std::string &str);

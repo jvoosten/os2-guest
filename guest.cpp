@@ -34,7 +34,6 @@
 Guest::Guest() 
 {
     m_hab = 0;
-    m_hmq = 0;
 }
 
 bool Guest::initialize ()
@@ -45,15 +44,6 @@ bool Guest::initialize ()
     {
     	log(0, "[Guest] Failed to create HAB");
     	ret = false;
-    }
-    else
-    {
-      m_hmq = WinCreateMsgQueue(m_hab, 0);
-      if (!m_hmq) 
-      {
-	log(0, "[Guest] Failed to create HMQ");
-    	ret = false;
-      }
     }
     
     /* Create codepage conversion objects */
@@ -78,7 +68,6 @@ Guest::~Guest()
     // Cleanup
     UniFreeUconvObject (m_local_ucs);
     UniFreeUconvObject (m_utf8_ucs);
-    WinDestroyMsgQueue(m_hmq);
     WinTerminate(m_hab);
 }
 
@@ -178,16 +167,16 @@ The text is internally transformed from the current codepage to UTF-8.
 Also CR/LF pairs are converted to single LF's, Unix style.
 
 */
-std::string Guest::getClipboard () 
+bool Guest::getClipboard (std::string &str) 
 {
     LOG_FUNCTION();
 
-    std::string ret;
+    bool ret = false;
     if (!WinOpenClipbrd(m_hab)) 
     {
     	log (0, "[Guest::getClipboard] Failed to open Clipboard");
     	m_oldClipboard = "";
-    	return ret;
+    	return false;
     }
   
     log (3, "[Guest::getClipboard] WinOpenClipbrd: success");
@@ -195,8 +184,9 @@ std::string Guest::getClipboard ()
     if (!WinQueryClipbrdFmtInfo(m_hab, CF_TEXT, &fmtInfo)) 
     {
     	log (2, "[Guest::getClipboard] No text in clipboard\n");
+    	str = "";
     	m_oldClipboard = "";
-    	return ret;
+    	return true;
     }
     
     const char *org = (const char *)WinQueryClipbrdData (m_hab, CF_TEXT);
@@ -246,7 +236,8 @@ std::string Guest::getClipboard ()
 		}
 		else
 		{
-		    ret = copy;
+		    str = copy;
+		    ret = true;
 		    log (2, "[Guest::getClipboard] Contents assigned");
 		}
 	    }

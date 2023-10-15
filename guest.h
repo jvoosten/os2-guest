@@ -33,14 +33,13 @@ public:
     bool initialize ();
     
     // Gets the guest clipboard contents
-    std::string getClipboard ();
+    bool getClipboard (std::string  &Str);
     
     // Sets the guest clipboard contents
     void setClipboard (const std::string &str);
     
 private:
     unsigned long m_hab;
-    unsigned long m_hmq;
   
     std::string m_oldClipboard;
     

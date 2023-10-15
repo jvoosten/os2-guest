@@ -71,15 +71,22 @@ int vmtools_daemon()
     	pointer_status = host.isPointerInGuest ();
     	if (pointer_status != old_pointer_status)
     	{
+    	    std::string s;
     	    if (pointer_status)
     	    {
     	    	log (1, "Window enter event");
-    	    	guest.setClipboard (host.getClipboard ());
+    	    	if (host.getClipboard (s))
+    	    	{
+    	    	    guest.setClipboard (s);
+    	    	}
     	    }
     	    else
     	    {
     	    	log (1, "Window leave event");
-    	    	host.setClipboard (guest.getClipboard ());
+    	    	if (guest.getClipboard (s))
+    	    	{
+    	    	    host.setClipboard (s);
+    	    	}
     	    }
     	    old_pointer_status = pointer_status;
     	}
