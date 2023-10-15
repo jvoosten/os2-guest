@@ -63,8 +63,8 @@ int vmtools_daemon()
 
     bool pointer_status = false;
     bool old_pointer_status = false;
-    for (int i = 0; i < 100; i++) {
-    	DosSleep(100);
+    for (;;) {
+    	DosSleep(250);
     	
     	// Whenever the mouse pointer leaves or enters the window, we 
     	// update the clipboards of host and guest
