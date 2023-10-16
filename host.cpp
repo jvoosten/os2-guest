@@ -211,8 +211,6 @@ bool Host::getClipboard (std::string &str)
 {
     LOG_FUNCTION();
 
-    std::string ret;
-
     int len = Backdoor1 (BACKDOOR_CMD_GET_CLIPBOARD_LEN);
     if (len < 0) 
     {
@@ -221,7 +219,7 @@ bool Host::getClipboard (std::string &str)
     } 
     if (len == 0) // Not sure if this can ever happen
     {
-    	ret = "";
+    	str = "";
     	return true;
     }
     
@@ -242,12 +240,11 @@ bool Host::getClipboard (std::string &str)
 	}
 	logf (2, "[Host::getClipboard] Got %d bytes in clipboard", len);
        
-	ret.assign (buf, len); 
-	free (buf);
+	str.assign (buf, len); 
+	m_oldClipboard = str;
+	//free (buf);
     }
     
-    m_oldClipboard = ret;
-    str = ret;
     return true;
 }
 

@@ -68,7 +68,8 @@ Guest::~Guest()
     // Cleanup
     UniFreeUconvObject (m_local_ucs);
     UniFreeUconvObject (m_utf8_ucs);
-    WinTerminate(m_hab);
+    WinDestroyMsgQueue (m_hmq);
+    WinTerminate (m_hab);
 }
 
   
@@ -98,64 +99,61 @@ Guest::~Guest()
     {
     	log(0, "[Guest::setClipboard] Failed to open clipboard");
     	m_oldClipboard = "";
+    	return;
     }
-    else
-    {
-    	UniChar *utmp = NULL; 
 
-    	log (3, "[Guest::setClipboard] Opened clipboard");
-    	WinEmptyClipbrd(m_hab);
-    
-    	logf (2, "[Guest::setClipboard] Input length = %d", len);
-    	if (len > 0)
-    	{
-	    // Do all the stuff to convert to the local codepage; first to UCS, then local
-	    utmp = (UniChar *)malloc (2 * len + 10); // Probably overkill if we get lots of 3-byte UTF-8 bytes in
-	    if (!utmp)
+    log (3, "[Guest::setClipboard] Opened clipboard");
+    WinEmptyClipbrd (m_hab);
+
+    logf (2, "[Guest::setClipboard] Input length = %d", len);
+    if (len > 0)
+    {
+	// Do all the stuff to convert to the local codepage; first to UCS, then local
+	UniChar *utmp = (UniChar *)malloc (2 * len + 10); // Probably overkill if we get lots of 3-byte UTF-8 bytes in
+	if (!utmp)
+	{
+	    log (0, "[Guest::setClipboard] Failed to allocate memory for conversion");
+	}
+	else
+	{
+	    rc = UniStrToUcs (m_utf8_ucs, utmp, (char *)inbuf, len + 1); // Len + 1 for the terminating byte
+	    if (rc != ULS_SUCCESS)
 	    {
-		log (0, "[Guest::setClipboard] Failed to allocate memory for conversion");
+		logf (0, "[Guest::setClipboard] Conversion to UCS failed: 0x%x", rc);
 	    }
 	    else
 	    {
-		rc = UniStrToUcs (m_utf8_ucs, utmp, (char *)inbuf, len + 1); // Len + 1 for the terminating byte
-		if (rc != ULS_SUCCESS)
+		// For the clipboard we must use shared memory
+		char *buf = NULL;
+		rc = DosAllocSharedMem((PPVOID)&buf,
+				   NULL, 2 * len + 10, 
+				   PAG_COMMIT | PAG_WRITE | OBJ_GIVEABLE);
+		if (rc != NO_ERROR)
 		{
-		    logf (0, "[Guest::setClipboard] Conversion to UCS failed: 0x%x", rc);
+		    log (0, "[Guest::setClipboard] Failed to allocate shared memory for guest clipboard");
 		}
 		else
 		{
-		    // For the clipboard we must use shared memory
-		    char *buf = NULL; 
-		    rc = DosAllocSharedMem((PPVOID)&buf,
-				       NULL, len + 10, 
-				       PAG_COMMIT | PAG_WRITE | OBJ_GIVEABLE);
-		    if (rc != NO_ERROR)
+		    rc = UniStrFromUcs (m_local_ucs, buf, utmp, len);
+		    if (rc != ULS_SUCCESS)
 		    {
-			log (0, "[Guest::setClipboard] Failed to allocate shared memory for guest clipboard.");
+			logf (1, "[Guest::setClipboard] Conversion to local codepage failed: 0x%x", rc);
 		    }
 		    else
 		    {
-			rc = UniStrFromUcs (m_local_ucs, buf, utmp, len);
-			if (rc != ULS_SUCCESS)
-			{
-			    logf (1, "[Guest::setClipboard] Conversion to local codepage failed: %d", rc);
-			}
-			else
-			{
-			    // Finally! Set the clipboard
-			    WinSetClipbrdData(m_hab, (ULONG) buf, CF_TEXT, CFI_POINTER);
-			    log (2, "[Guest::setClipboard] Text pasted into clipboard"); 
-			}
-			DosFreeMem (buf);
-		    } // .. DosAllocSharedMem
-		} // ..UniStrToUcs
-		free ((void *)utmp);
-	    } // ..utmp allocated
-	} // ..if len > 0
-	
-	m_oldClipboard = str;
-	WinCloseClipbrd(m_hab);
-    }
+			// Finally! Set the clipboard
+			WinSetClipbrdData(m_hab, (ULONG) buf, CF_TEXT, CFI_POINTER);
+			log (2, "[Guest::setClipboard] Text pasted into clipboard"); 
+		    }
+		    DosFreeMem (buf);
+		} // .. DosAllocSharedMem
+	    } // ..UniStrToUcs
+	    free ((void *)utmp);
+	} // ..utmp allocated
+    } // ..if len > 0
+    
+    m_oldClipboard = str;
+    WinCloseClipbrd(m_hab);
 }
 
 
@@ -183,7 +181,7 @@ bool Guest::getClipboard (std::string &str)
     ULONG fmtInfo = 0;
     if (!WinQueryClipbrdFmtInfo(m_hab, CF_TEXT, &fmtInfo)) 
     {
-    	log (2, "[Guest::getClipboard] No text in clipboard\n");
+    	log (2, "[Guest::getClipboard] No text in clipboard");
     	str = "";
     	m_oldClipboard = "";
     	return true;
@@ -202,7 +200,7 @@ bool Guest::getClipboard (std::string &str)
 	utmp = (UniChar *) malloc (len * 2 + 10); // Intermediate UCS-2 buffer
 	if (!copy || !utmp)
 	{
-	    log (0, "[Guest::getClipboard] Failed to allocate memory for conversion\n");
+	    log (0, "[Guest::getClipboard] Failed to allocate memory for conversion");
 	}
 	else
 	{
@@ -224,7 +222,7 @@ bool Guest::getClipboard (std::string &str)
 	    rc = UniStrToUcs (m_local_ucs, utmp, copy, len + 1); // Len + 1 for null byte?
 	    if (rc != ULS_SUCCESS)
 	    {
-	    	log (1, "[Guest::getClipboard] Failed conversion to UCS");
+	    	logf (1, "[Guest::getClipboard] Failed conversion to UCS: 0x%x", rc);
 	    }
 	    else
 	    {
@@ -232,7 +230,7 @@ bool Guest::getClipboard (std::string &str)
 		rc = UniStrFromUcs (m_utf8_ucs, copy, utmp, len * 3);
 		if (rc != ULS_SUCCESS)
 		{
-		    log (1, "[Guest::getClipboard] Failed conversion to UTF-8");
+		    logf (1, "[Guest::getClipboard] Failed conversion to UTF-8: 0x%x", rc);
 		}
 		else
 		{
