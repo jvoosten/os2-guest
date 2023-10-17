@@ -193,8 +193,8 @@ bool Host::isPointerInGuest () const
 {
     int32_t i = Backdoor1 (BACKDOOR_CMD_GET_MOUSE_POS);
     logf (3, "[Host::isPointerInGuest] Pointer pos: %x" , i);
-    int32_t x = i >> 16;
-    int32_t y = i & 0xffff;
+    int16_t x = i >> 16;
+    int16_t y = i & 0xffff;
     return (x >= 0 && y >= 0);
 }
 
