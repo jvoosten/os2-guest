@@ -2,7 +2,7 @@
 # Makefile: OS/2 Guest Tools for VMWare
 #
 
-VERSION = 2.0
+VERSION = 2.1
 CC 	= wcl386
 AS 	= wasm
 
@@ -47,7 +47,7 @@ vmoff.exe:	vmoff.obj backdoor.obj
 vmon.exe:	vmon.obj backdoor.obj
 	wlink system $(SYSTEM) $(LDFLAGS) name $@ &
 	  file {vmon.obj backdoor.obj}
-	 
+
 # A test tool
 vmtest.exe:     vmtest.obj backdoor.obj
 	wlink system $(SYSTEM) $(LDFLAGS) name vmtest.exe &
@@ -64,22 +64,22 @@ $(DIST_DIR):
 $(DIST_README): $(README)
 	sed s/@VMTOOLS_VERSION@/$(VERSION)/ $< > $@
 
-dist: config.h $(VMTOOLSD_EXE) $(VMTOOLSCTL_EXE) $(DIST_DIR) $(DIST_README) .SYMBOLIC
+dist: config.h $(VMTOOLSD_EXE) vmon.exe vmoff.exe $(DIST_DIR) $(DIST_README) .SYMBOLIC
 	-del $(DIST_DIR)\*.exe
 	-del $(DIST_DIR)\*.txt
-	copy $(VMTOOLSCTL_EXE) $(VMTOOLSD_EXE) $(DIST_DIR)
+	copy $(VMTOOLSD_EXE) $(DIST_DIR)
+	copy vmon.exe $(DIST_DIR)
+	copy vmoff.exe $(DIST_DIR)
 	sed s/@VMTOOLS_VERSION@/$(VERSION)/ $(README) > $(DIST_README)
 	zip -r $(DIST_ZIP) $(DIST_DIR)\*
 
 clean: .SYMBOLIC
 	-del config.h
 	-del *.obj
-	-del $(VMTOOLSCTL_EXE)
 	-del $(VMTOOLSD_EXE)
 	-del vmtest.exe
+	-del vmon.exe vmoff.exe
 	-rm -fr $(DIST_DIR)
 	-del $(DIST_ZIP)
-
-# host.obj: host.cpp host.h backdoor.h
 
 
