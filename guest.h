@@ -40,6 +40,7 @@ public:
     
 private:
     unsigned long m_hab;
+    unsigned long m_hmq;
   
     std::string m_oldClipboard;
     
