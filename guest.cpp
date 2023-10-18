@@ -265,6 +265,7 @@ bool Guest::getClipboard (std::string &str)
 	    }
 
 	    free (utmp);
+	    free (copy);
 	}
     }
 

@@ -2,7 +2,7 @@
 # Makefile: OS/2 Guest Tools for VMWare
 #
 
-VERSION = 2.1
+VERSION = 2.1.1
 CC 	= wcl386
 AS 	= wasm
 
