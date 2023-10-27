@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unidef.h>
 
 #define INCL_PM
 #define INCL_DOS
@@ -57,7 +58,7 @@ bool Guest::initialize ()
     }
 
     /* Create codepage conversion objects */
-    int rc = UniCreateUconvObject ((UniChar *)L"", &m_local_ucs);
+    int rc = UniCreateUconvObject ((UniChar *)L"@sub=yes", &m_local_ucs);
     if (rc != ULS_SUCCESS)
     {
     	log (0, "[Guest] Failed to create local UniConv object");
@@ -102,7 +103,7 @@ Guest::~Guest()
     }
 
     int rc = 0;
-    int len = str.size ();
+    size_t len = str.size ();
     const char *inbuf = str.c_str();
 
     if (!WinOpenClipbrd (m_hab))
@@ -115,7 +116,7 @@ Guest::~Guest()
     log (3, "[Guest::setClipboard] Opened clipboard");
     WinEmptyClipbrd (m_hab);
 
-    logf (2, "[Guest::setClipboard] Input length = %d", len);
+    logf (2, "[Guest::setClipboard] Input length = %d bytes", len);
     if (len > 0)
     {
 	/* Do all the stuff to convert to the local codepage; first to UCS, then local */
@@ -136,18 +137,22 @@ Guest::~Guest()
 	    }
 	    else
 	    {
+	    	size_t ulen = UniStrlen (utmp); // This is how many characters we have in our UCS buffer
+	    	logf (3, "[Guest::setClipboard] UCS string = %d characters", ulen);
+	    	
 		// For the clipboard we must use shared memory
 		char *buf = NULL;
+		int sh_buf_len = 2 * len + 10;
 		rc = DosAllocSharedMem((PPVOID)&buf,
-				   NULL, 2 * len + 10,
+				   NULL, sh_buf_len,
 				   PAG_COMMIT | PAG_WRITE | OBJ_GIVEABLE);
 		if (rc != NO_ERROR)
-		{
+		{                                          
 		    log (0, "[Guest::setClipboard] Failed to allocate shared memory for guest clipboard");
 		}
 		else
 		{
-		    rc = UniStrFromUcs (m_local_ucs, buf, utmp, len);
+		    rc = UniStrFromUcs (m_local_ucs, buf, utmp, sh_buf_len); // +1 for null byte
 		    if (rc != ULS_SUCCESS)
 		    {
 			logf (1, "[Guest::setClipboard] Conversion to local codepage failed: 0x%x", rc);
@@ -155,6 +160,7 @@ Guest::~Guest()
 		    }
 		    else
 		    {
+		    	logf (3, "[Guest::setClipboard] Output length = %d bytes", strlen (buf));
 			// Finally! Set the clipboard
 			rc = WinSetClipbrdData (m_hab, (ULONG) buf, CF_TEXT, CFI_POINTER);
 			if (rc == 0)
@@ -214,19 +220,21 @@ bool Guest::getClipboard (std::string &str)
 
 	if (org)
 	{
-	    int len = 0;
 	    char *copy = NULL;
 	    UniChar *utmp = NULL;
 
-	    len = strlen (org);
-	    copy = (char *) malloc (len * 3 + 10); // Allocate enough for the output UTF-8 string
-	    utmp = (UniChar *) malloc (len * 2 + 10); // Intermediate UCS-2 buffer
+	    size_t len = strlen (org);
+	    size_t clen = 3 * len + 1;
+	    size_t ulen = 2 * len + 1; 
+	    copy = (char *) malloc (clen); // Allocate enough for the output UTF-8 string
+	    utmp = (UniChar *) calloc (ulen, sizeof (UniChar)); // Intermediate UCS-2 buffer
 	    if (!copy || !utmp)
 	    {
 		log (0, "[Guest::getClipboard] Failed to allocate memory for conversion");
 	    }
 	    else
 	    {
+	    	logf (3, "[Guest::getClipboard] Input length = %d bytes" , len);
 		// Step one: convert 0D/0A to just 0A for copy/paste
 		const char *s = org;
 		char *d = copy;
@@ -242,15 +250,18 @@ bool Guest::getClipboard (std::string &str)
 		*d = '\0'; // Finish string
 
 		// Step two: convert to UCS-2
-		rc = UniStrToUcs (m_local_ucs, utmp, copy, len + 1); // Len + 1 for null byte?
+		rc = UniStrToUcs (m_local_ucs, utmp, copy, ulen); // Len + 1 for null byte?
 		if (rc != ULS_SUCCESS)
 		{
 		    logf (1, "[Guest::getClipboard] Failed conversion to UCS: 0x%x", rc);
 		}
 		else
 		{
+		    ulen = UniStrlen (utmp); // This is how many characters we really have in our UCS buffer
+		    logf (3, "[Guest::getClipboard] UCS string = %d characters", ulen);
+		    
 		    // Step 3: back to UTF, into the 'copy'  buffer
-		    rc = UniStrFromUcs (m_utf8_ucs, copy, utmp, len * 3);
+		    rc = UniStrFromUcs (m_utf8_ucs, copy, utmp, clen);
 		    if (rc != ULS_SUCCESS)
 		    {
 			logf (1, "[Guest::getClipboard] Failed conversion to UTF-8: 0x%x", rc);
@@ -259,6 +270,7 @@ bool Guest::getClipboard (std::string &str)
 		    {
 			str = copy;
 			ret = true;
+		    	logf (3, "[Guest::setClipboard] Output length = %d bytes", str.size ());
 			log (2, "[Guest::getClipboard] Contents assigned");
 		    }
 		}

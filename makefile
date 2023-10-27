@@ -2,7 +2,7 @@
 # Makefile: OS/2 Guest Tools for VMWare
 #
 
-VERSION = 2.1.1
+VERSION = 2.1.2
 CC 	= wcl386
 AS 	= wasm
 
@@ -38,7 +38,7 @@ config.h: config.h.in
 
 vmtoolsd.exe: config.h $(VMTOOLSD_OBJS)
 	wlink system $(SYSTEM_PM) $(LDFLAGS) name $@ &
-	 file {$(VMTOOLSD_OBJS)} library libconv
+	 file {$(VMTOOLSD_OBJS)} library libconv library libuls
 
 vmoff.exe:	vmoff.obj backdoor.obj
 	wlink system $(SYSTEM) $(LDFLAGS) name $@ &
