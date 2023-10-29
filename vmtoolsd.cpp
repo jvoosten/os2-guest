@@ -20,13 +20,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define INCL_KBD
-#define INCL_PM
 #define INCL_DOS
 #define INCL_DOSERRORS
-#define INCL_DOSPROCESS
 #define INCL_DOSMEMMGR
+#define INCL_DOSPROCESS
+#define INCL_DOSSEMAPHORES
 #define INCL_ERRORS
+#define INCL_KBD
+#define INCL_PM
 
 #include <os2.h>
 
@@ -96,10 +97,45 @@ int vmtools_daemon()
     return 0;
 }
 
+
+/**
+@brief Check if there is an instance running
+@return 0 On success (we're first), 1 otherwise
+
+Uses a named semaphore to check if there is already an instance running.
+*/
+static int check_first_instance ()
+{
+    const char *sem_name = "\\SEM32\\VMToolsd";
+    HEV semaphore;
+    int rc;
+    
+    rc = DosCreateEventSem (sem_name, &semaphore, 0, FALSE);
+    if (rc != 0)
+    {
+    	// Something went wrong...
+    	if (rc == ERROR_DUPLICATE_NAME)
+    	{
+    	    return 1;
+    	}
+    	else
+    	{
+    	    return 2;
+    	}
+    }
+    return 0;
+}
+
 int main(int argc, char* argv[]) 
 {
-  printf("vmtools: OS/2 Guest for VMWare. [https://github.com/wwiv/os2-guest]\r\n\r\n");
+  printf ("vmtools: OS/2 Guest tools for ESXI/VMWare.\r\n\r\n");
 
+  if (check_first_instance ())
+  {
+      printf ("Tools already running, exiting.\r\n");
+      return 1;
+  }
+  
   // Interactive mode
 
   for (int i = 1; i < argc; i++) 
