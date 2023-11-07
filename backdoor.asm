@@ -25,11 +25,9 @@ _DATA   segment word public 'DATA'
 ;; MAGIC number to send to backdoor api
 BDOOR_MAGIC	equ	564D5868h
 
-;; Magic number for RPC calls
-RPC_MAGIC	equ	49435052h
-
 ;; Bit in reply (ECX) that indicates success
 SUCCESS_BIT	equ	00010000h
+DORECV_BIT      equ     00020000h
 
 ;; Low-bandwidth backdoor port number 
 ;; for the IN/OUT interface.
@@ -109,15 +107,15 @@ BackdoorAll_ proc near
 BackdoorAll_ endp
 
 
-;; int BackdoorRPCOpen ()	
+;; int BackdoorRPCOpen (int mode)	
 public BackdoorRPCOpen_
 BackdoorRPCOpen_ proc near
 	push ebx
 	push ecx
 	push edx
+	mov ebx, eax
 	mov eax, BDOOR_MAGIC
-	mov ebx, RPC_MAGIC
-	mov ecx, 0000001Eh
+	mov ecx, 0000001Eh		; CMD_MESSAGE | OPEN (== 0)
 	mov dx, BDOOR_PORT
 	in eax, dx
 	test ecx, SUCCESS_BIT
@@ -137,7 +135,7 @@ open_end:
 		
 BackdoorRPCOpen_ endp
 
-;; int BackdoorRPCSend (int channel, const char *out, int &reply_id);
+;; int BackdoorRPCSend (int channel, const char *out);
 public BackdoorRPCSend_
 BackdoorRPCSend_ proc near
 	push ebx
@@ -147,7 +145,6 @@ BackdoorRPCSend_ proc near
 	push edi
 	push es
 	
-	push ebx	; keep &reply_id
 	mov esi, edx    ; keep start of string
 		
 	; Determine length of string with scasb which uses ES:DI
@@ -167,13 +164,11 @@ BackdoorRPCSend_ proc near
 	shl eax, 16
 	or edx, eax     ; port + channel number
 	mov eax, BDOOR_MAGIC
-	mov ecx, 0001001Eh    ; Send RPC length
+	mov ecx, 0001001Eh    		; CMD_MESSAGE | SEND_LENGTH
 	in eax, dx
-		
 	test ecx, SUCCESS_BIT
 	jnz send_send_data
 	; FAIL
-	pop ebx
 	mov eax, -1
 	jmp send_end
 
@@ -182,35 +177,23 @@ BackdoorRPCSend_ proc near
 	; end of the string. EDX contains the portnumber + channel, unchanged. 		
 send_send_data:
 	cmp esi, edi 
-	jae send_get_repl_len	; all done
-	lodsd		; get 4 bytes
-	mov ebx,eax
+	jae send_done 			; all done
+	lodsd				; get 4 bytes
+	mov ebx, eax
 	mov eax, BDOOR_MAGIC
-	mov ecx, 0002001Eh
+	mov ecx, 0002001Eh		; CMD_MESSAGE | SEND_DATA
 	in eax, dx
 	test ecx, SUCCESS_BIT
 	jnz send_send_data
 	; FAIL
 	mov eax, -2
 	jmp send_end
-		
-	; Fetch length of reply by VM host
-send_get_repl_len:
-	mov eax, BDOOR_MAGIC
-	mov ecx, 0003001Eh
-	in eax, dx
-	mov eax, ebx	; if succesful ebx has the length, so copy already.
-	test ecx, SUCCESS_BIT
-	jnz send_end
-	; FAIL
-	mov eax, -3
-	; fall through
-		
-send_end:	
-	pop esi		; &reply_id
-	shr edx, 16	; edx(hi) should contain the 'reply' ID; in case of failure this will
-	mov [esi], edx   ; contain garbage but we don't care		
 
+send_done:
+	mov eax, 0 
+	; fall-through
+	
+send_end:	
 	pop es
 	pop edi
 	pop esi
@@ -220,7 +203,8 @@ send_end:
 	ret
 BackdoorRPCSend_ endp
 
-;; int BackdoorRPCReceive (int channel, char *in, int len, int reply_id);
+;; int BackdoorRPCReceive (int channel, char *in, int len);
+;; eax = channel, edx = *in, ebx = len
 public BackdoorRPCReceive_
 BackdoorRPCReceive_ proc near
 	push ebx
@@ -233,52 +217,76 @@ BackdoorRPCReceive_ proc near
 	; setup stack, reserve 3 dwords 
 	push ebp
 	mov ebp, esp
-	sub esp, 12
-	mov dword ptr -4[ebp], 0	; return value
-	mov -8[ebp], ecx		; reply_id
+	sub esp, 20
+	mov dword ptr -4[ebp], 0	; return 
+	mov -8[ebp], 0 			; reply_id
 	shl eax, 16			; eax = 'channel', combine with port already
 	or eax, BDOOR_PORT		
-	mov -12[ebp], eax
-		
-	; use EDI to store output in, but EDI operates on ES
-	push ds
-	pop es
-	mov edi, edx		; edx == '*in'
-	mov esi, edi		; use ESI as end-of-buffer marker		
-	add esi, ebx		; ebx = 'len' 
+	mov -12[ebp], eax		; store for later use in edx
+	mov -16[ebp], edx		; pointer to in
+	mov -20[ebp], ebx		; len
 	
-	; prepare channel; eax contains 'channel'
-recv_recv_loop:	
+	; Fetch length of reply by VM host
+	mov edx, eax
+	mov eax, BDOOR_MAGIC
+	mov ecx, 0003001Eh		; CMD_MESSAGE | RECV_LENGTH
+	in eax, dx			; if succesful ebx has the length
+	test ecx, SUCCESS_BIT		; ecx should contain the the 'success' bit  +'dorecv' in case we have data
+	jnz recv_got_length
+	; FAIL
+	mov dword ptr -4[ebp], -1
+	jmp recv_end
+
+recv_got_length:
+	test ecx, DORECV_BIT		; No data? Then we're done
+	jz recv_end
+	
+	shr edx, 16			; contains reply-ID
+	mov -8[ebp], edx		
+	cmp ebx, -20[ebp]		; check if we have enough buffer space
+	jbe recv_got_2
+	mov ebx, -20[ebp]		; nope: limit to buffer lenght ('len')
+
+recv_got_2:
+	mov -4[ebp], ebx		; Store expected number of bytes in return value
+	push ds				; use EDI to store output in, but EDI operates on ES
+	pop es
+	mov edi, -16[ebp]		; get '*in' back
+	mov esi, edi			; use ESI as end-of-buffer marker		
+	add esi, ebx
+
+recv_recv_loop:
+	; Receive loop; compare edi/esi pointers, otherwise fetch data
 	cmp edi, esi
 	jae recv_done
 	mov eax, BDOOR_MAGIC		
 	mov ebx, -8[ebp]		; reply_id
-	mov ecx, 0004001Eh
+	mov ecx, 0004001Eh		; CMD_MESSAGE | RECV_DATA
 	mov edx, -12[ebp]
 	in eax, dx			; hmm, edx(lo) gets reset
 	test ecx, SUCCESS_BIT
 	jz recv_fail
 	mov eax, ebx
-	stosd				; Store value
+	stosd				; Store value, 4 bytes at a time
 	jmp recv_recv_loop
 
 recv_fail:	
-	mov dword ptr -4[ebp], -1
+	mov dword ptr -4[ebp], -2
 	jmp recv_end
 		
 recv_done:	
 	mov eax, BDOOR_MAGIC
 	mov ebx, -8[ebp]		; final use of reply_id
-	mov ecx, 0005001Eh
+	mov ecx, 0005001Eh		; CMD_MESSAGE | ACK_RECV
 	mov edx, -12[ebp]
 	in eax, dx
 	test ecx, SUCCESS_BIT
 	jnz recv_end
-	mov dword ptr -4[ebp], -2
+	mov dword ptr -4[ebp], -3
 		
 recv_end:	
-	mov eax, -4[ebp]	; retrieve return value
-	mov esp, ebp		;restore stack
+	mov eax, -4[ebp]	; Retrieve return value
+	mov esp, ebp		; Restore stack
 	pop ebp
 	pop es
 	pop edi
@@ -302,7 +310,7 @@ BackdoorRPCClose_ proc near
 	shl eax, 16
 	or edx, eax 
 	mov eax, BDOOR_MAGIC
-	mov ecx, 0006001Eh
+	mov ecx, 0006001Eh		; CMD_MESSAGE | CLOSE
 	in eax, dx
 	
 	pop edx

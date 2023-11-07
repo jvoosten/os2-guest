@@ -20,6 +20,12 @@
 
 #include <unistd.h>
 
+// Magic number for RPC calls
+#define RPC_MAGIC	0x49435052
+// Magic number for TCLO calls (from host to guest RPC)
+#define TCLO_MAGIC 	0x4f4c4354
+
+
 extern "C" {
 /**
 @brief Perform backdoor call with a single command
@@ -49,33 +55,41 @@ extern void BackdoorAll (int cmd, int func, int regs[4]);
 
 /**
 @brief Open RPC channel to host VM
+@bried mode Magic number for RPCI (regular RPC) or TCLO
 @return  -1 on error or channel number (0-7)
 */
-extern int BackdoorRPCOpen ();
+extern int BackdoorRPCOpen (int mode);
 /** 
 @brief Send an RPC command (string) to the VM host
 @param channel Channel number from BackdoorRPCOpen()
 @param out String to string to the host
-@param reply_id [out] An ID to receive the reply 
-@return -1 upon error, otherwise the length of the reply
+@return 0 is success, -1 if length cannot be send, -2 on send error
 
-The reply_id is necessary to receive the correct string from the VM; use this
-ID with BackdoorRPCReceive() to get the answer from the VM host.
+Should always be followed by BackdoorRPCReceive.
+
 */
-extern int BackdoorRPCSend (int channel, const char *out, int *reply_id);
+extern int BackdoorRPCSend (int channel, const char *out);
 /**
 @brief Receive RPC reply in buffer 
 @param channel Channel number from BackdoorRPCOpen()
 @param in String where reply will be copied
 @param len Length of buffer for @p in
 @param reply_id ID as returned by BackdoorRPCSend()
-@return 0 on success, -1 on error, -2 if RPC could not be completed
+@return received length (0 or above), negative number for error.
 
 Receives a reply from the VM host, copies up to @p len bytes to the @p in buffer.
 If there is not enough room the reply will be truncated; there is no way to retrieve
 the remainder.
+
+Should be called after every call to BackdoorRPCSend.
+
+Returns 0 upon success, other error codes are:
+-1 : no reply waiting
+-2 : error while fetching data
+-3 : error while ending reception
+
 */
-extern int BackdoorRPCReceive (int channel, char *in, int len, int reply_id);
+extern int BackdoorRPCReceive (int channel, char *in, int len);
 /**
 @brief Close RPC channel
 @param channel Channel number from BackdoorRPCOpen()
