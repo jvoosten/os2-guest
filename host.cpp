@@ -48,11 +48,56 @@
 Host::Host ()
 {
     m_mouseHandle = -1;
+    m_rpcChannel = -1;
+    m_tcloChannel = -1;
 }
 
+/**
+@brief Destructor.
+
+Closes all communication channels.
+*/
 Host::~Host ()
 {
+    log (1, "[Host::~Host]");
     closeMouseDriver ();
+    if (m_rpcChannel > 0)
+    {
+    	BackdoorRPCClose (m_rpcChannel);
+    	m_rpcChannel = -1;
+    }
+    if (m_tcloChannel > 0)
+    {
+    	BackdoorRPCClose (m_tcloChannel);
+    	m_tcloChannel = -1;
+    }
+}
+
+/**
+@brief Initialize host communication
+
+Opens RPC and TCLO channels.
+*/
+
+bool Host::initialize()
+{
+    bool ret = true;
+    
+    m_rpcChannel = BackdoorRPCOpen (RPC_MAGIC);
+    if (m_rpcChannel < 0)
+    {
+    	log (0, "[Host] Failed to open RPC channel for communication");
+    	ret = false;
+    }
+    
+    m_tcloChannel = BackdoorRPCOpen (TCLO_MAGIC);
+    if (m_tcloChannel < 0)
+    {
+    	log (0, "Host] Failed to open TCLO channel for events");
+    	ret = false;
+    }
+    
+    return ret;
 }
 
 /**
@@ -72,45 +117,13 @@ Does an RPC call with a version indicating self-managed software.
 */
 void Host::announceToolsInstallation()
 {
-  int rpc, len, reply_id;
-  const int buf_len = 1000;
-  char buf[buf_len];
-
-  rpc = BackdoorRPCOpen ();
-  if (rpc < 0)
-  {
-    log (1, "[Host] Failed to open RPC channel.");
-    return;
-  }
-
-  logf (2, "Opened RPC channel %d.", rpc);
-  len = BackdoorRPCSend (rpc, "tools.set.version 2147483647", &reply_id);
-  if (len < 0)
-  {
-    logf (1, "[Host] Error from RPC: %d", len);
-  }
-  else
-  {
-    if (len < buf_len)
-    {
-      if (BackdoorRPCReceive (rpc, buf, len, reply_id) < 0)
-      {
-	log (1, "[Host] Receiving of reply failed");
-      }
-      else
-      {
-	buf[len] = '\0';
-	logf (2, "[Host] Received reply from RPC: %s", buf);
-      }
-    }
-    else
-    {
-      logf (1, "[Host] Reply too big (%d)", len);
-    }
-  }
+  std::string dummy;
   
-  BackdoorRPCClose (rpc);
-  log (2, "[Host] Closed RPC channel");
+  int rc = rpcSendReply ("tools.set.version 2147483647", dummy);
+  if (rc < 0)
+  {
+      log (1, "[Host] Failed to announce installation of VMTools");
+  }
 }
 
 /**
@@ -285,6 +298,101 @@ void Host::setClipboard (const std::string &str)
 }
 
 
+/**
+@brief Poll the host for an event
+@param str Output string; defaults to empty
+@return True upon success, false on error
+
+Uses the TCLO channel to ask the host if there has been an event. If so, that is returned in @p str.
+This function returns true if the command was succesful (even if it is empty, which it will be most
+of the time).
+
+*/
+bool Host::getHostCommand (std::string &str)
+{
+    int rc = 0;
+    const int iosize = 255; 
+    char buf[iosize + 1];
+    
+    str = ""; // Clear contents
+    if (m_tcloChannel < 0)
+    {
+    	return false;
+    }
+    
+    // Send an empty message 
+    if (BackdoorRPCSend (m_tcloChannel, "") < 0)
+    {
+    	log (1, "[Host] Failed to send empty message to TCLO channel");
+    	return false;
+    }
+
+    // Get reply
+    rc = BackdoorRPCReceive (m_tcloChannel, buf, iosize); 
+    if (rc < 0)
+    {
+    	logf (1, "[Host::getHostCommand] Failed to receive reply from TCLO channel: %d", rc);
+    	return false;
+    }
+    buf[rc] = '\0';
+    str = buf;
+    return true;
+}
+
+bool Host::replyHost (const std::string &str)
+{
+    int rc = BackdoorRPCSend (m_tcloChannel, str.c_str ());
+    if (rc < 0)
+    {
+    	logf (1, "[Host::replyHost] Failed to send reply: %d", rc);
+    	return false;
+    }
+    return true;
+}
+
+
+/**
+@brief Set a capability in the host
+@param str Short capability string
+
+A capability is something that the guest OS can accomodate ("is capable of")
+from the host. For example, screen resize so that if the user resizes the window in which
+the VM is running, the guest OS will update its internal dimensions as well.
+
+Another use case is poweroff / reboot, which is important if you want a clean shutdown;
+the host tells the guest it needs to power itself down properly. 
+
+This function sends a capability without a parameter.
+*/
+Host::ResultCode Host::setCapability (const std::string &str)
+{
+    // Make full string; the extra space is *ahum* legacy....
+    std::string t = "tools.capability."  + str + " " ;
+    std::string r;
+    
+    int rc = rpcSendReply (t, r);
+    if (rc < 0)
+    {
+    	return CommError;
+    }
+    
+    if (r != "1 ")
+    {
+    	return Failed;
+    }
+    
+    return Ok;
+}
+
+
+// Set capability in VMHost with value
+bool Host::setCapability (const std::string &str, unsigned int value)
+{
+    return false;
+}
+
+
+
 bool Host::openMouseDriver()
 {
     if (m_mouseHandle != -1)
@@ -327,4 +435,61 @@ void Host::closeMouseDriver ()
     	m_mouseHandle = -1;
     }
 }
+
+
+
+int Host::rpcSendReply (const std::string &send, std::string &reply)
+{
+    const int bufsize = 255;
+    char buf[bufsize + 1];
+    int rc;
+    
+    logf (2, "[Host::rpcSendReply] (%s)" , send.c_str ());
+    if (m_rpcChannel < 0)
+    {
+    	// closed? Try to re-open
+    	m_rpcChannel = BackdoorRPCOpen (RPC_MAGIC);
+    }
+    if (m_rpcChannel < 0)
+    {
+    	log (0, "[Host] Failed to open RPC channel to host");
+    	return -1;
+    }
+    
+    reply = "";
+    for (int retries = 0; retries < 2; retries++)
+    {
+    	rc = BackdoorRPCSend (m_rpcChannel, send.c_str());
+    	if (rc < 0)
+    	{
+    	    logf (1, "[Host::rpcSendReply] Error from RPCSend (%d), retrying", rc);
+    	    m_rpcChannel = BackdoorRPCOpen (RPC_MAGIC);
+    	}
+    	else
+    	{
+    	    break;
+    	}
+    }
+    
+    if (rc < 0)
+    {
+    	log (1, "[Host::rpcSendReply] Giving up");
+    	return -1;
+    }
+    
+    rc = BackdoorRPCReceive (m_rpcChannel, buf, bufsize);
+    if (rc < 0)
+    {
+	logf (1, "[Host::rpcSendReply] Receiving of reply failed: %d", rc);
+	return -2;
+    }
+    else
+    {
+	buf[rc] = '\0';
+	reply = buf;
+	logf (2, "[Host::rpcSendReply] Received reply from RPC: '%s'", buf);
+    }
+    return 0;
+}
+
 

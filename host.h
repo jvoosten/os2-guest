@@ -27,9 +27,19 @@
 class Host
 {
 public:	
+    enum ResultCode
+    {
+    	Ok = 0,
+    	CommError = -1,
+    	Failed = -2
+    };
+    
     Host ();
     ~Host ();
 
+    // Open host communication
+    bool initialize ();
+    
     // Get VMWare backdoor version
     int getBackdoorVersion () const;
     
@@ -50,14 +60,29 @@ public:
 
     // Set clipboard in host
     void setClipboard (const std::string &str);
+    
+    // Get TCLO command (if any)
+    bool getHostCommand (std::string &str);
+    // Send a reply to the Host over TCLO
+    bool replyHost (const std::string &str);
   
+    // Set capability in VMHost
+    ResultCode setCapability (const std::string &str);
+    // Set capability in VMHost with value
+    bool setCapability (const std::string &str, unsigned int value);
+    
 private:
     HFILE m_mouseHandle;
 
     std::string m_oldClipboard;	 
     
+    int m_rpcChannel;
+    int m_tcloChannel;
+    
     bool openMouseDriver ();
     void closeMouseDriver ();
+    
+    // Do a full send/reply roundtrip over the RPC channel
+    int rpcSendReply (const std::string &send, std::string &reply);
 };
-
 
