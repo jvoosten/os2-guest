@@ -30,7 +30,7 @@
 #define INCL_ERRORS
 #include <os2.h>
 
-// Logs at a higheer level than threshold will not be logged.
+// Logs at a higher level than threshold will not be logged.
 static int LOG_THRESHOLD = 0;
 static FILE* logh = stderr;
 
