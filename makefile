@@ -2,7 +2,7 @@
 # Makefile: OS/2 Guest Tools for VMWare
 #
 
-VERSION = 2.2.0
+VERSION = 2.3.0
 CC 	= wcl386
 AS 	= wasm
 
@@ -24,7 +24,7 @@ VMTOOLSD_OBJS	= backdoor.obj	&
 #########################################################
 # Makefile rules 
 
-.cpp.obj:
+.cpp.obj: .AUTODEPEND
 	$(CC) $(CFLAGS) -c $<
 
 .asm.obj:
@@ -49,9 +49,9 @@ vmon.exe:	vmon.obj backdoor.obj
 	  file {vmon.obj backdoor.obj}
 
 # A test tool
-vmtest.exe:     vmtest.obj backdoor.obj
+vmtest.exe:     vmtest.obj backdoor.obj host.obj log.obj
 	wlink system $(SYSTEM) $(LDFLAGS) name vmtest.exe &
-	 file {vmtest.obj backdoor.obj}
+	 file {vmtest.obj backdoor.obj host.obj log.obj}
 
 DIST_DIR	= .\os2-guest-$(VERSION)
 DIST_ZIP	= os2-guest-$(VERSION).zip
@@ -81,5 +81,4 @@ clean: .SYMBOLIC
 	-del vmon.exe vmoff.exe
 	-rm -fr $(DIST_DIR)
 	-del $(DIST_ZIP)
-
 

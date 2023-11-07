@@ -43,16 +43,22 @@ int vmtools_daemon()
     Host host;
     Guest guest;
 
-    if (host.getBackdoorVersion () != 6)
+    if (!host.initialize ())
     {
-    	log (0, "Not a supported backdoor version");
-    	return 1;
+    	log (0, "Host initialization failed, exiting");
+    	return 2;
     }
     
     if (!guest.initialize ())
     {
-    	log (0, "Initialization failed, exiting");
+    	log (0, "Guest initialization failed, exiting");
     	return 2;
+    }
+    
+    if (host.getBackdoorVersion () != 6)
+    {
+    	log (0, "Not a supported backdoor version");
+    	return 1;
     }
     
     host.announceToolsInstallation ();
