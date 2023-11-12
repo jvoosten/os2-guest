@@ -320,10 +320,11 @@ bool Host::getHostCommand (std::string &str)
     	return false;
     }
     
-    // Send an empty message 
-    if (BackdoorRPCSend (m_tcloChannel, "") < 0)
+    // Send an empty message
+    rc = BackdoorRPCSend (m_tcloChannel, "");
+    if (rc < 0)
     {
-    	log (1, "[Host] Failed to send empty message to TCLO channel");
+    	logf (1, "[Host] Failed to send empty message to TCLO channel: %d", rc);
     	return false;
     }
 
@@ -341,6 +342,7 @@ bool Host::getHostCommand (std::string &str)
 
 bool Host::replyHost (const std::string &str)
 {
+    logf (3, "[Host::replyHost] Sending reply '%s'", str.c_str ());
     int rc = BackdoorRPCSend (m_tcloChannel, str.c_str ());
     if (rc < 0)
     {

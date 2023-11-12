@@ -286,3 +286,47 @@ bool Guest::getClipboard (std::string &str)
     return ret;
 }
 
+/**
+@brief Reboot guest OS 
+
+Issues a command to properly reboot the OS, but applications do not have
+the ability to halt the process (e.g. prompt you with a question like "Discard changes to file X?").
+
+Intended for shutdown when the VM manager asks for it. Should not return, unless something went wrong.
+*/
+
+void Guest::rebootOS ()
+{
+    // From edm2.org
+    int rc;
+    HFILE dosfile;
+    ULONG action = 0;
+    const int IOCTL_DOS = 0x00D5;
+    const int DOS_REBOOT = 0x00AB;
+    
+    log (1, "[Guest::rebootOS]");
+    rc = DosOpen("\\DEV\\DOS$", &dosfile, &action, 0,
+    	FILE_NORMAL, 
+    	OPEN_ACTION_OPEN_IF_EXISTS, 
+    	OPEN_SHARE_DENYNONE | OPEN_ACCESS_READWRITE, 0);
+    if (rc != NO_ERROR)
+    {
+    	logf (0, "[Guest::rebootOS] Failed to open DOS$ device: %d", rc);
+    	return;
+    }
+ 
+    rc = DosShutdown (0);
+    if (rc != NO_ERROR)
+    {
+    	logf (0, "[Guest::rebootOS] DosShutdown failed: %d", rc);
+    }
+    else
+    {
+	rc = DosDevIOCtl (dosfile, IOCTL_DOS, DOS_REBOOT, 
+	    NULL, 0, NULL, NULL, 0, NULL);
+	// Still here?? Then we did not succeed
+	logf (0, "[Guest::rebootOS] IOCTL failed: %d", rc);
+    }
+    DosClose (dosfile);
+}
+

@@ -12,7 +12,8 @@
 #include <string.h>
 #include <uconv.h>
 
-#include "backdoor.h" 
+#include "backdoor.h"
+#include "guest.h"
 #include "host.h"
 #include "log.h"
 
@@ -20,6 +21,7 @@
 int main(int arg, char *argv[])
 {
     Host host;
+    Guest guest;
     std::string cmd;
     
     set_loglevel (3);
@@ -29,6 +31,10 @@ int main(int arg, char *argv[])
     printf ("CPU speed = %d.\n" , Backdoor1 (1));	
     printf ("VMWare backdoor version = %d.\n" , host.getBackdoorVersion ());	
 
+    guest.initialize ();
+    guest.rebootOS ();
+    
+    
     host.setCapability ("statechange");
     host.setCapability ("softpowerop_retry");
 

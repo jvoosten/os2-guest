@@ -44,7 +44,7 @@ public:
     int getBackdoorVersion () const;
     
     // Tell VMWare we have integration
-    void announceToolsInstallation();
+    void announceToolsInstallation ();
 
     // Is mouse integration already enabled
     bool isMouseIntegrationEnabled ();

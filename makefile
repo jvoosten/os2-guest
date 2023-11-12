@@ -49,9 +49,9 @@ vmon.exe:	vmon.obj backdoor.obj
 	  file {vmon.obj backdoor.obj}
 
 # A test tool
-vmtest.exe:     vmtest.obj backdoor.obj host.obj log.obj
+vmtest.exe:     vmtest.obj backdoor.obj guest.obj host.obj log.obj
 	wlink system $(SYSTEM) $(LDFLAGS) name vmtest.exe &
-	 file {vmtest.obj backdoor.obj host.obj log.obj}
+	 file {vmtest.obj backdoor.obj guest.obj host.obj log.obj} library libconv library libuls
 
 DIST_DIR	= .\os2-guest-$(VERSION)
 DIST_ZIP	= os2-guest-$(VERSION).zip
