@@ -32,28 +32,40 @@ int main(int arg, char *argv[])
     printf ("VMWare backdoor version = %d.\n" , host.getBackdoorVersion ());	
 
     guest.initialize ();
-    guest.rebootOS ();
     
-    
-    host.setCapability ("statechange");
-    host.setCapability ("softpowerop_retry");
-
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < 200; i++)
     {
-    	DosSleep (250);
+    	printf("> %d\n", i);
+    	DosSleep (1000);
     	host.getHostCommand (cmd);
     	if (cmd.size() > 0)
     	{
     	    printf("Command = '%s'\n", cmd.c_str());
     	}
     	
-    	if ("reset"  == cmd)
+    	if ("reset" == cmd)
     	{
     	    host.replyHost ("OK ATR toolbox");
     	}
-    	else if ("ping"  == cmd)
+    	else if ("Capabilities_Register" == cmd)
+    	{
+    	    host.replyHost ("OK ");
+    	    host.setCapability ("statechange");
+    	    host.setCapability ("softpowerop_retry");
+    	}
+    	else if ("ping" == cmd)
     	{
     	    host.replyHost ("OK "); // we're here
+    	}
+    	else if ("OS_Reboot" == cmd)
+    	{
+    	    host.replyHost ("tools.os.statechachange.status 1 2");
+    	    guest.rebootOS ();
+    	}
+    	else if ("OS_Halt" == cmd)
+    	{
+    	    host.replyHost ("tools.os.statechachange.status 1 1");
+    	    guest.haltOS ();
     	}
     }
     	

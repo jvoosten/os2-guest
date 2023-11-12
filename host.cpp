@@ -50,6 +50,7 @@ Host::Host ()
     m_mouseHandle = -1;
     m_rpcChannel = -1;
     m_tcloChannel = -1;
+    m_tcloFirstCommand = false;
 }
 
 /**
@@ -89,14 +90,19 @@ bool Host::initialize()
     	log (0, "[Host] Failed to open RPC channel for communication");
     	ret = false;
     }
+    logf (2, "[Host] RPC channel = %d", m_rpcChannel);
     
     m_tcloChannel = BackdoorRPCOpen (TCLO_MAGIC);
     if (m_tcloChannel < 0)
     {
     	log (0, "Host] Failed to open TCLO channel for events");
-    	ret = false;
+	ret = false;
     }
-    
+    else
+    {
+    	logf (2, "[Host] TCLO channel = %d", m_tcloChannel);
+    	m_tcloFirstCommand = false;
+    }
     return ret;
 }
 
@@ -310,6 +316,7 @@ of the time).
 */
 bool Host::getHostCommand (std::string &str)
 {
+    LOG_FUNCTION ();
     int rc = 0;
     const int iosize = 255; 
     char buf[iosize + 1];
@@ -320,12 +327,19 @@ bool Host::getHostCommand (std::string &str)
     	return false;
     }
     
-    // Send an empty message
-    rc = BackdoorRPCSend (m_tcloChannel, "");
-    if (rc < 0)
+    // Send an empty message, but not the first time after we opened the channel; 
+    // the host complains that the "guest application was expected to fetch the 
+    // RPC before sending any result". So we don't.
+    if (true || m_tcloFirstCommand)
     {
-    	logf (1, "[Host] Failed to send empty message to TCLO channel: %d", rc);
-    	return false;
+    	printf ("sending empty message\n");
+	rc = BackdoorRPCSend (m_tcloChannel, "");
+	if (rc < 0)
+	{
+	    logf (1, "[Host] Failed to send empty message to TCLO channel: %d", rc);
+	    // Sometimes happens after a 'reset' command, don't know why
+	    //return false;
+	}
     }
 
     // Get reply
@@ -337,6 +351,8 @@ bool Host::getHostCommand (std::string &str)
     }
     buf[rc] = '\0';
     str = buf;
+
+    m_tcloFirstCommand = true;
     return true;
 }
 
@@ -347,6 +363,28 @@ bool Host::replyHost (const std::string &str)
     if (rc < 0)
     {
     	logf (1, "[Host::replyHost] Failed to send reply: %d", rc);
+    	return false;
+    }
+    return true;
+}
+
+/**
+@brief Close and re-open our command channel
+
+Should be called after a 'reset' command.
+*/
+bool Host::restartCommandChannel ()
+{
+    LOG_FUNCTION ();
+    if (m_tcloChannel >= 0)
+    {
+    	BackdoorRPCClose (m_tcloChannel);
+    	m_tcloChannel = -1;
+    }
+    m_tcloChannel = BackdoorRPCOpen (TCLO_MAGIC);
+    if (m_tcloChannel < 0)
+    {
+    	log (0, "[Host::restartCommandChannel] Failed to re-open channel.");
     	return false;
     }
     return true;

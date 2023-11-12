@@ -65,6 +65,8 @@ public:
     bool getHostCommand (std::string &str);
     // Send a reply to the Host over TCLO
     bool replyHost (const std::string &str);
+    // Restart command channel 
+    bool restartCommandChannel ();
   
     // Set capability in VMHost
     ResultCode setCapability (const std::string &str);
@@ -78,6 +80,7 @@ private:
     
     int m_rpcChannel;
     int m_tcloChannel;
+    bool m_tcloFirstCommand;   // If true, we have polled for our first command from the TCLO channel 
     
     bool openMouseDriver ();
     void closeMouseDriver ();
