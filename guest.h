@@ -38,8 +38,11 @@ public:
     // Sets the guest clipboard contents
     void setClipboard (const std::string &str);
     
-    // reboot guest OS
+    // Reboot guest OS
     void rebootOS ();
+    
+    // Halt (power off) guest OS
+    void haltOS ();
     
 private:
     unsigned long m_hab;

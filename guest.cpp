@@ -330,3 +330,29 @@ void Guest::rebootOS ()
     DosClose (dosfile);
 }
 
+
+/**
+@brief Shuts down guest OS to the power-off state
+
+As with rebootOS(), does not give the programs time to ask nicely if you want to 
+save files, etc.
+
+Should also not return.
+*/
+void Guest::haltOS ()
+{
+    char proc_name[CCHMAXPATH] = {0};
+    char args[CCHMAXPATH] = "shutdown\0/o\0"; 
+    RESULTCODES res = {0};
+    int rc;
+    
+    // In contrast to rebootOS we use an external tool for this: shutdown /o
+    rc = DosExecPgm (proc_name, sizeof (proc_name), EXEC_SYNC,
+    	args, NULL,
+    	&res, "shutdown.exe");
+    if (rc != NO_ERROR)
+    {
+    	logf (0, "[Guest::haltOS] DosExec failed: %d", rc);
+    }
+}
+
