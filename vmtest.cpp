@@ -62,12 +62,12 @@ int main(int arg, char *argv[])
     	}
     	else if ("OS_Reboot" == cmd)
     	{
-    	    host.replyHost ("tools.os.statechachange.status 1 2");
+    	    host.replyHost ("tools.os.statechange.status 1 2");
     	    guest.rebootOS ();
     	}
     	else if ("OS_Halt" == cmd)
     	{
-    	    host.replyHost ("tools.os.statechachange.status 1 1");
+    	    host.replyHost ("tools.os.statechange.status 1 1");
     	    guest.haltOS ();
     	}
 	else

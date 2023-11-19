@@ -54,7 +54,7 @@ int vmtools_daemon()
     const int sleep_between = 250; // Wait time in milliseconds between polls to the VM
     const int command_interval = 1000; // How often do we poll for commands from the host
     int time_to_command = 0;   // Count down for command poll
-    std::string cmd;
+    std::string cmd, dummy;
     GuestOSStatus status = Running;
     
     Host host;
@@ -161,7 +161,8 @@ int vmtools_daemon()
 		{
 		    log (1, "Rebooting OS");
 		    status = Reboot;
-		    host.replyHost ("tools.os.statechachange.status 1 2");
+		    host.replyHost ("OK ");
+		    host.rpcSendReply ("tools.os.statechange.status 1 2", dummy);
 		    guest.rebootOS ();
 		}
 		else
@@ -175,7 +176,8 @@ int vmtools_daemon()
 		{
 		    log (1, "Halting OS");
 		    status = Halt;
-		    host.replyHost ("tools.os.statechachange.status 1 1");
+		    host.replyHost ("OK ");
+		    host.rpcSendReply ("tools.os.statechange.status 1 1", dummy);
 		    guest.haltOS ();
 		}
 		else

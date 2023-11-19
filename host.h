@@ -67,14 +67,14 @@ public:
     // Set capability in VMHost with value
     bool setCapability (const std::string &str, unsigned int value);
     
+    // Do a full send/reply roundtrip over the RPC channel
+    int rpcSendReply (const std::string &send, std::string &reply);
+
 private:
     std::string m_oldClipboard;	 
     
     int m_rpcChannel;
     int m_tcloChannel;
     std::string m_tcloReply;     // Reply we must send to the host over the TCLO channel
-    
-    // Do a full send/reply roundtrip over the RPC channel
-    int rpcSendReply (const std::string &send, std::string &reply);
 };
 

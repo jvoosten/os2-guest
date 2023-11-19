@@ -368,7 +368,7 @@ Intended for shutdown when the VM manager asks for it. Should not return, unless
 
 void Guest::rebootOS ()
 {
-    // From edm2.org
+    // From edm2.com
     int rc;
     HFILE dosfile;
     ULONG action = 0;
