@@ -35,15 +35,18 @@ int main(int arg, char *argv[])
     
     for (int i = 0; i < 200; i++)
     {
-    	printf("> %d\n", i);
     	DosSleep (1000);
     	host.getHostCommand (cmd);
     	if (cmd.size() > 0)
     	{
-    	    printf("Command = '%s'\n", cmd.c_str());
+    	    logf (2, "Command = '%s'\n", cmd.c_str ());
     	}
     	
-    	if ("reset" == cmd)
+    	if ("" == cmd)
+    	{
+    	    // Nothing, no reply needed (is empty already)
+    	}
+    	else if ("reset" == cmd)
     	{
     	    host.replyHost ("OK ATR toolbox");
     	}
@@ -67,6 +70,11 @@ int main(int arg, char *argv[])
     	    host.replyHost ("tools.os.statechachange.status 1 1");
     	    guest.haltOS ();
     	}
+	else
+	{
+	    log (1, "Unknown command");
+	    host.replyHost ("ERROR Unknown command"); 
+	}
     }
     	
   

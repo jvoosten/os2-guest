@@ -38,7 +38,24 @@
 
 int vmtools_daemon() 
 {
+    enum GuestOSStatus
+    {
+    	Running,
+    	Halt,
+    	Reboot,
+    	PowerOn, 	// Not implemented; besides, how can you turn something on remotely when it's off? 
+    	Resume,		// Not available on OS/2
+    	Suspend,	// Neither is this
+    	Last
+    };
+    
+
     LOG_FUNCTION();
+    const int sleep_between = 250; // Wait time in milliseconds between polls to the VM
+    const int command_interval = 1000; // How often do we poll for commands from the host
+    int time_to_command = 0;   // Count down for command poll
+    std::string cmd;
+    GuestOSStatus status = Running;
     
     Host host;
     Guest guest;
@@ -70,11 +87,12 @@ int vmtools_daemon()
 
     bool pointer_status = false;
     bool old_pointer_status = false;
+    time_to_command = command_interval;
     for (;;) {
-    	DosSleep(250);
+    	DosSleep(sleep_between);
     	
-    	// Whenever the mouse pointer leaves or enters the window, we 
-    	// update the clipboards of host and guest
+    	// Whenever the mouse pointer leaves or enters the window, 
+    	// we update the clipboards of host and guest.
     	pointer_status = host.isPointerInGuest ();
     	if (pointer_status != old_pointer_status)
     	{
@@ -97,7 +115,81 @@ int vmtools_daemon()
     	    }
     	    old_pointer_status = pointer_status;
     	}
-    }
+    	
+    	/* Process commands that come in over the TCLO interface from the vmware host.
+    	   Commands can be things like 'reset', 'ping', reboot or halt the guest OS, etc.
+    	   
+    	   Some of the command should be acknowledged, especially the 'ping'; this lets
+    	   VMWare / ESXi know the VMTools are alive and kicking.
+    	 */
+    	time_to_command -= sleep_between;
+    	if (time_to_command <= 0)
+    	{
+    	    // Timeout, get command. Reset timer first.
+    	    time_to_command = command_interval;
+    	    if (!host.getHostCommand (cmd))
+    	    {
+    	    	continue;
+    	    }
+    	    	
+    	    if (cmd.empty ()) // Nothing to do
+    	    {
+    	    	continue;
+    	    }
+    	    
+    	    logf (2, "Command = '%s'", cmd.c_str ());
+	    if ("reset" == cmd) 
+	    {
+		// We're supposed to "reset" our status with that of VMWare, but we have none so we just acknowledge
+		host.replyHost ("OK ATR toolbox");
+		status = Running;
+	    }
+	    else if ("Capabilities_Register" == cmd)
+	    {
+	    	// I guess VMWare wants to know what we can do
+		host.replyHost ("OK ");
+		host.setCapability ("statechange");
+		host.setCapability ("softpowerop_retry");
+	    }
+	    else if ("ping" == cmd)
+	    {
+		host.replyHost ("OK "); // we're here
+	    }
+	    else if ("OS_Reboot" == cmd)
+	    {
+		if (Running == status)
+		{
+		    log (1, "Rebooting OS");
+		    status = Reboot;
+		    host.replyHost ("tools.os.statechachange.status 1 2");
+		    guest.rebootOS ();
+		}
+		else
+		{
+		    log (1, "Reboot command received but we are already busy with shutdown/reboot");
+		}
+	    }
+	    else if ("OS_Halt" == cmd)
+	    {
+		if (Running == status)
+		{
+		    log (1, "Halting OS");
+		    status = Halt;
+		    host.replyHost ("tools.os.statechachange.status 1 1");
+		    guest.haltOS ();
+		}
+		else
+		{
+		    log (1, "Shutdown command received but we are already busy with shutdown/reboot");
+		}
+	    }
+	    else
+	    {
+		log (1, "Unknown command");
+		host.replyHost ("ERROR Unknown command"); 
+	    }
+    	}  // ..if time_to_command
+    } // ..for
 
     host.setMouseIntegration (false);
     return 0;

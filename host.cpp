@@ -50,7 +50,6 @@ Host::Host ()
     m_mouseHandle = -1;
     m_rpcChannel = -1;
     m_tcloChannel = -1;
-    m_tcloFirstCommand = false;
 }
 
 /**
@@ -90,7 +89,10 @@ bool Host::initialize()
     	log (0, "[Host] Failed to open RPC channel for communication");
     	ret = false;
     }
-    logf (2, "[Host] RPC channel = %d", m_rpcChannel);
+    else
+    {
+    	logf (2, "[Host] RPC channel = %d", m_rpcChannel);
+    }
     
     m_tcloChannel = BackdoorRPCOpen (TCLO_MAGIC);
     if (m_tcloChannel < 0)
@@ -101,7 +103,6 @@ bool Host::initialize()
     else
     {
     	logf (2, "[Host] TCLO channel = %d", m_tcloChannel);
-    	m_tcloFirstCommand = false;
     }
     return ret;
 }
@@ -123,13 +124,13 @@ Does an RPC call with a version indicating self-managed software.
 */
 void Host::announceToolsInstallation()
 {
-  std::string dummy;
+    std::string dummy;
   
-  int rc = rpcSendReply ("tools.set.version 2147483647", dummy);
-  if (rc < 0)
-  {
-      log (1, "[Host] Failed to announce installation of VMTools");
-  }
+    int rc = rpcSendReply ("tools.set.version 2147483647", dummy);
+    if (rc < 0)
+    {
+        log (1, "[Host] Failed to announce installation of VMTools");
+    }
 }
 
 /**
@@ -242,7 +243,7 @@ bool Host::getClipboard (std::string &str)
     	return true;
     }
     
-    char *buf = (char *) malloc (len * sizeof (int32_t) + 10);
+    char *buf = (char *) malloc (len + 4);
     if (!buf)
     {
 	log (0, "[Host::getClipboard] Memory allocation failed");
@@ -259,9 +260,11 @@ bool Host::getClipboard (std::string &str)
 	}
 	logf (2, "[Host::getClipboard] Got %d bytes in clipboard", len);
        
+	buf[len] = '\0';
+	str.reserve (len);
 	str.assign (buf, len); 
 	m_oldClipboard = str;
-	//free (buf);
+	free (buf);
     }
     
     return true;
@@ -285,7 +288,7 @@ void Host::setClipboard (const std::string &str)
     	return;
     }
     
-    int len = str.size();
+    int len = str.size ();
     logf (2, "[Host::setClipboard] Pushing %d bytes", len);
     int rc = Backdoor2 (BACKDOOR_CMD_SET_CLIPBOARD_LEN, len);
     if (rc < 0)
@@ -309,9 +312,11 @@ void Host::setClipboard (const std::string &str)
 @param str Output string; defaults to empty
 @return True upon success, false on error
 
-Uses the TCLO channel to ask the host if there has been an event. If so, that is returned in @p str.
-This function returns true if the command was succesful (even if it is empty, which it will be most
-of the time).
+First sends the last reply (@sa setReplyHost) to the host, then polls for an event. If there is
+one, that is returned in @p str and the function returns true. 
+
+The internal reply string is cleared, so that at the next poll at least an empty string is sent
+to wake up the host.
 
 */
 bool Host::getHostCommand (std::string &str)
@@ -327,22 +332,18 @@ bool Host::getHostCommand (std::string &str)
     	return false;
     }
     
-    // Send an empty message, but not the first time after we opened the channel; 
-    // the host complains that the "guest application was expected to fetch the 
-    // RPC before sending any result". So we don't.
-    if (true || m_tcloFirstCommand)
+    // Send last reply to channel; this should also trigger a new command from the TCLO channel (if any)
+    // The first time it will be an empty string, and we also clear the reply so that if there was 
+    // no command, the next 'ping'  will be an empty string.
+    rc = BackdoorRPCSend (m_tcloChannel, m_tcloReply.c_str ());
+    m_tcloReply = "";
+    if (rc < 0)
     {
-    	printf ("sending empty message\n");
-	rc = BackdoorRPCSend (m_tcloChannel, "");
-	if (rc < 0)
-	{
-	    logf (1, "[Host] Failed to send empty message to TCLO channel: %d", rc);
-	    // Sometimes happens after a 'reset' command, don't know why
-	    //return false;
-	}
+    	logf (1, "[Host::getHostCommand] Failed to send reply to TCLO channel: %d", rc);
+    	return false;
     }
-
-    // Get reply
+     
+    // Get command
     rc = BackdoorRPCReceive (m_tcloChannel, buf, iosize); 
     if (rc < 0)
     {
@@ -352,20 +353,12 @@ bool Host::getHostCommand (std::string &str)
     buf[rc] = '\0';
     str = buf;
 
-    m_tcloFirstCommand = true;
     return true;
 }
 
-bool Host::replyHost (const std::string &str)
+void Host::replyHost (const std::string &str)
 {
-    logf (3, "[Host::replyHost] Sending reply '%s'", str.c_str ());
-    int rc = BackdoorRPCSend (m_tcloChannel, str.c_str ());
-    if (rc < 0)
-    {
-    	logf (1, "[Host::replyHost] Failed to send reply: %d", rc);
-    	return false;
-    }
-    return true;
+    m_tcloReply = str;
 }
 
 /**

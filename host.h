@@ -63,8 +63,8 @@ public:
     
     // Get TCLO command (if any)
     bool getHostCommand (std::string &str);
-    // Send a reply to the Host over TCLO
-    bool replyHost (const std::string &str);
+    // Set reply to the Host of last TCLO command
+    void replyHost (const std::string &str);
     // Restart command channel 
     bool restartCommandChannel ();
   
@@ -80,7 +80,7 @@ private:
     
     int m_rpcChannel;
     int m_tcloChannel;
-    bool m_tcloFirstCommand;   // If true, we have polled for our first command from the TCLO channel 
+    std::string m_tcloReply;     // Reply we must send to the host over the TCLO channel
     
     bool openMouseDriver ();
     void closeMouseDriver ();
