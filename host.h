@@ -46,12 +46,6 @@ public:
     // Tell VMWare we have integration
     void announceToolsInstallation ();
 
-    // Is mouse integration already enabled
-    bool isMouseIntegrationEnabled ();
-    
-    // Turn mouse integration on or off
-    void setMouseIntegration (bool on_off);
-    
     // Test mouse pointer position
     bool isPointerInGuest () const;
 
@@ -74,16 +68,11 @@ public:
     bool setCapability (const std::string &str, unsigned int value);
     
 private:
-    HFILE m_mouseHandle;
-
     std::string m_oldClipboard;	 
     
     int m_rpcChannel;
     int m_tcloChannel;
     std::string m_tcloReply;     // Reply we must send to the host over the TCLO channel
-    
-    bool openMouseDriver ();
-    void closeMouseDriver ();
     
     // Do a full send/reply roundtrip over the RPC channel
     int rpcSendReply (const std::string &send, std::string &reply);

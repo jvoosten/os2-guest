@@ -38,6 +38,12 @@ public:
     // Sets the guest clipboard contents
     void setClipboard (const std::string &str);
     
+    // Is mouse integration already enabled
+    bool isMouseIntegrationEnabled ();
+    
+    // Turn mouse integration on or off
+    void setMouseIntegration (bool on_off);
+    
     // Reboot guest OS
     void rebootOS ();
     
@@ -52,6 +58,11 @@ private:
     
     /// For conversion of local strings to UTF8 for the external clipboard
     UconvObject m_local_ucs, m_utf8_ucs;
+
+    HFILE m_mouseHandle;
+
+    bool openMouseDriver ();
+    void closeMouseDriver ();
 };
 
 

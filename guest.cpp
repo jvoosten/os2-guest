@@ -36,6 +36,7 @@ Guest::Guest()
 {
     m_hab = 0;
     m_hmq = 0;
+    m_mouseHandle = -1;
 }
 
 bool Guest::initialize ()
@@ -76,7 +77,9 @@ bool Guest::initialize ()
 
 Guest::~Guest()
 {
+    LOG_FUNCTION ();
     // Cleanup
+    closeMouseDriver ();
     UniFreeUconvObject (m_local_ucs);
     UniFreeUconvObject (m_utf8_ucs);
     WinDestroyMsgQueue (m_hmq);
@@ -287,6 +290,74 @@ bool Guest::getClipboard (std::string &str)
 }
 
 /**
+@brief Check for mouse integration with mouse driver
+@return True if mouse integration is enabled
+
+Probes the mouse driver for ESX mouse integration, and if enabled returns true.
+
+*/
+bool Guest::isMouseIntegrationEnabled ()
+{
+    if (!openMouseDriver())
+    {
+    	return false;
+    }
+    
+    bool ret = false;
+    // Ioctl variables
+    ULONG category = 7; // mouse functions
+    ULONG function = 0x7E; // Our ioctl function
+    uint16_t my_data[3] = {0};
+    ULONG data_len = 6;
+    
+    int rc = DosDevIOCtl (m_mouseHandle, category, function,
+	NULL, 0, NULL,           		// Parameters (none)
+	my_data, 6, &data_len); 		// Data (3 words, only first one is used)
+    if (rc == NO_ERROR)
+    {
+    	logf (2, "[Host::isMouseIntegrationEnabled] return = 0x%04x", my_data[0]);
+    	// bit 15 is ESX detection, bit 0 is absolute mouse position enabled
+	if (my_data[0] & 0x0001)
+	{
+	    ret = true;
+	}
+    }
+    
+    closeMouseDriver ();
+    return ret;
+}
+
+
+void Guest::setMouseIntegration (bool on_off)
+{
+    if (!openMouseDriver())
+    {
+    	return;
+    }
+    
+    logf (2, "[Host::setMouseIntegration] -> %s", on_off ? "on" : "off");
+    
+    // Ioctl variables
+    ULONG category = 7; // mouse functions
+    ULONG function = 0x7F; // Our ioctl function
+    uint16_t my_param = 0;
+    ULONG param_len = 2;
+    
+    my_param = on_off ? 1 : 0;  // Proper command to turn integration on or off
+    int rc = DosDevIOCtl (m_mouseHandle, category, function,
+	&my_param, 2, &param_len,       // Parameters (1 word)
+	NULL, 0, NULL);  		// Data (none)
+    if (rc != NO_ERROR)
+    {
+    	logf (1, "[Host::setMouseIntegration] Failed to set mouse integration, error code = %d", rc);
+    }
+    
+    closeMouseDriver ();
+}
+
+
+
+/**
 @brief Reboot guest OS 
 
 Issues a command to properly reboot the OS, but applications do not have
@@ -355,4 +426,56 @@ void Guest::haltOS ()
     	logf (0, "[Guest::haltOS] DosExec failed: %d", rc);
     }
 }
+
+
+
+/**
+@brief Open connection to mouse driver 
+
+Opens a handle to the driver so we can perform IOCTL calls to it.
+*/
+bool Guest::openMouseDriver()
+{
+    if (m_mouseHandle != -1)
+    {
+    	return true;
+    }
+  
+    log (1, "[Host] Opening mouse driver");
+    ULONG action = 0;
+    ULONG size = 0;
+    ULONG attribute = FILE_NORMAL;
+    ULONG open_flags = FILE_OPEN;
+    ULONG open_mode = OPEN_SHARE_DENYNONE | OPEN_FLAGS_FAIL_ON_ERROR | OPEN_ACCESS_READWRITE;
+    APIRET rc = NO_ERROR;
+  
+    // Open the device to the driver */
+    rc = DosOpen("MOUSE$", &m_mouseHandle, &action, 
+	size, 
+	attribute,
+	open_flags,
+	open_mode,
+	(PEAOP2)NULL);
+    
+    if (rc != NO_ERROR)
+    {
+    	logf (0, "[Host] Failed to open MOUSE$ driver: rc = %d", rc);
+    	return false;
+    }
+
+    return true;
+}
+
+
+void Guest::closeMouseDriver ()
+{
+    if (m_mouseHandle != -1)
+    {
+    	log (1, "[Host] Closing mouse driver");
+    	DosClose (m_mouseHandle);
+    	m_mouseHandle = -1;
+    }
+}
+
+
 

@@ -80,9 +80,9 @@ int vmtools_daemon()
     
     host.announceToolsInstallation ();
     
-    if (!host.isMouseIntegrationEnabled ())
+    if (!guest.isMouseIntegrationEnabled ())
     {
-    	host.setMouseIntegration (true);
+    	guest.setMouseIntegration (true);
     }
 
     bool pointer_status = false;
@@ -191,7 +191,7 @@ int vmtools_daemon()
     	}  // ..if time_to_command
     } // ..for
 
-    host.setMouseIntegration (false);
+    guest.setMouseIntegration (false);
     return 0;
 }
 
