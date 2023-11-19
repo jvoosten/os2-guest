@@ -31,7 +31,7 @@
 #include <os2.h>
 
 // Logs at a higher level than threshold will not be logged.
-static int LOG_THRESHOLD = 0;
+static int LOG_THRESHOLD = 1;
 static FILE* logh = stderr;
 
 void set_loglevel(int lvl) 

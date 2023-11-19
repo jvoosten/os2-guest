@@ -2,7 +2,7 @@
 # Makefile: OS/2 Guest Tools for VMWare
 #
 
-VERSION = 2.3.0
+VERSION = 2.2.0
 CC 	= wcl386
 AS 	= wasm
 
@@ -25,7 +25,7 @@ VMTOOLSD_OBJS	= backdoor.obj	&
 # Makefile rules 
 
 .cpp.obj: .AUTODEPEND
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(CFLAGS) -DVERSION="$(VERSION)" -c $<
 
 .asm.obj:
 	$(AS) $(ASFLAGS) $<

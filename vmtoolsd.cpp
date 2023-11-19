@@ -185,7 +185,7 @@ int vmtools_daemon()
 	    }
 	    else
 	    {
-		log (1, "Unknown command");
+		logf (1, "Unknown command: %s", cmd.c_str ());
 		host.replyHost ("ERROR Unknown command"); 
 	    }
     	}  // ..if time_to_command
@@ -272,6 +272,8 @@ int main(int argc, char* argv[])
       continue;
     }
   } 
+  
+  logf (1, "VMTools for OS/2 version " VERSION " starting.");
 
   return vmtools_daemon();
 }
