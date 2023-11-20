@@ -26,6 +26,7 @@
 
 #define INCL_PM
 #define INCL_DOS
+#define INCL_DOSMISC
 #define INCL_ERRORS
 #include <os2.h>
 
@@ -438,6 +439,23 @@ void Guest::haltOS ()
     ULONG session;
     PID pid;
     int rc;
+    char shutdown_path[100];
+    ULONG qsi_buf[2];
+
+    // Determine boot drive so we can set the path to shutdown.exe
+    rc = DosQuerySysInfo (QSV_BOOT_DRIVE, QSV_BOOT_DRIVE, qsi_buf, sizeof (qsi_buf));
+    if (rc != 0 || qsi_buf[0] < 1 || qsi_buf[0] > 26)
+    {
+    	logf (0, "[Guest::haltOS] Cannot determine bootdrive, assuming C:");
+    	strcpy (shutdown_path, "c:");
+    }
+    else
+    {
+    	shutdown_path[0] = (char) (qsi_buf[0] + 0x60);
+    	shutdown_path[1] = ':';
+    	shutdown_path[2] = '\0';
+    }
+    strcat (shutdown_path, "\\sys\\bin\\shutdown.exe");
 
     // Use DosStartSession as we may be starting a non-PM app
     memset (&sd, 0, sizeof (STARTDATA));
@@ -448,7 +466,7 @@ void Guest::haltOS ()
     sd.TraceOpt = SSF_TRACEOPT_NONE;
     sd.SessionType = SSF_TYPE_DEFAULT;
     sd.PgmTitle = "shutdown";
-    sd.PgmName = "c:\\sys\\bin\\shutdown.exe";
+    sd.PgmName = shutdown_path;
     sd.PgmInputs = (unsigned char *)"/o";
 
     rc = DosStartSession (&sd, &session, &pid);
