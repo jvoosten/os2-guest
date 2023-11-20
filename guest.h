@@ -32,6 +32,8 @@ public:
     
     bool initialize ();
     
+    bool processQueue ();
+    
     // Gets the guest clipboard contents
     bool getClipboard (std::string  &Str);
     

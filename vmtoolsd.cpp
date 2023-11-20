@@ -48,7 +48,6 @@ int vmtools_daemon()
     	Suspend,	// Neither is this
     	Last
     };
-    
 
     LOG_FUNCTION();
     const int sleep_between = 250; // Wait time in milliseconds between polls to the VM
@@ -88,7 +87,8 @@ int vmtools_daemon()
     bool pointer_status = false;
     bool old_pointer_status = false;
     time_to_command = command_interval;
-    for (;;) {
+    while (guest.processQueue ()) 
+    {
     	DosSleep(sleep_between);
     	
     	// Whenever the mouse pointer leaves or enters the window, 

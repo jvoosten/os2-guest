@@ -39,6 +39,17 @@ Guest::Guest()
     m_mouseHandle = -1;
 }
 
+Guest::~Guest()
+{
+    LOG_FUNCTION ();
+    // Cleanup
+    closeMouseDriver ();
+    UniFreeUconvObject (m_local_ucs);
+    UniFreeUconvObject (m_utf8_ucs);
+    WinDestroyMsgQueue (m_hmq);
+    WinTerminate (m_hab);
+}
+
 bool Guest::initialize ()
 {
     bool ret = true;
@@ -75,18 +86,29 @@ bool Guest::initialize ()
     return ret;
 }
 
-Guest::~Guest()
+
+/**
+@brief Process message queue
+
+Checks queue for a message so it does not hang the system during shutdown.
+Returns false if we received the WM_QUIT message. No other messages are processed.
+
+*/
+bool Guest::processQueue ()
 {
-    LOG_FUNCTION ();
-    // Cleanup
-    closeMouseDriver ();
-    UniFreeUconvObject (m_local_ucs);
-    UniFreeUconvObject (m_utf8_ucs);
-    WinDestroyMsgQueue (m_hmq);
-    WinTerminate (m_hab);
+    QMSG msg;
+
+    // Don't use WinGetMsg as that function blocks.
+    WinPeekMsg (m_hab, &msg, NULLHANDLE, 0, 0, PM_REMOVE);
+    //logf (3, "processQueue: rc = %d, msg = 0x%04x", rc, msg.msg);
+    if (msg.msg == WM_QUIT)
+    {
+	log (1, "Received QUIT message");
+	return false;
+    }
+    WinDispatchMsg (m_hab, &msg);
+    return true;
 }
-
-
 
 
 /**
@@ -142,7 +164,7 @@ Guest::~Guest()
 	    {
 	    	size_t ulen = UniStrlen (utmp); // This is how many characters we have in our UCS buffer
 	    	logf (3, "[Guest::setClipboard] UCS string = %d characters", ulen);
-	    	
+
 		// For the clipboard we must use shared memory
 		char *buf = NULL;
 		int sh_buf_len = 2 * len + 10;
@@ -150,7 +172,7 @@ Guest::~Guest()
 				   NULL, sh_buf_len,
 				   PAG_COMMIT | PAG_WRITE | OBJ_GIVEABLE);
 		if (rc != NO_ERROR)
-		{                                          
+		{
 		    log (0, "[Guest::setClipboard] Failed to allocate shared memory for guest clipboard");
 		}
 		else
@@ -228,7 +250,7 @@ bool Guest::getClipboard (std::string &str)
 
 	    size_t len = strlen (org);
 	    size_t clen = 3 * len + 1;
-	    size_t ulen = 2 * len + 1; 
+	    size_t ulen = 2 * len + 1;
 	    copy = (char *) malloc (clen); // Allocate enough for the output UTF-8 string
 	    utmp = (UniChar *) calloc (ulen, sizeof (UniChar)); // Intermediate UCS-2 buffer
 	    if (!copy || !utmp)
@@ -262,7 +284,7 @@ bool Guest::getClipboard (std::string &str)
 		{
 		    ulen = UniStrlen (utmp); // This is how many characters we really have in our UCS buffer
 		    logf (3, "[Guest::getClipboard] UCS string = %d characters", ulen);
-		    
+
 		    // Step 3: back to UTF, into the 'copy'  buffer
 		    rc = UniStrFromUcs (m_utf8_ucs, copy, utmp, clen);
 		    if (rc != ULS_SUCCESS)
@@ -302,14 +324,14 @@ bool Guest::isMouseIntegrationEnabled ()
     {
     	return false;
     }
-    
+
     bool ret = false;
     // Ioctl variables
     ULONG category = 7; // mouse functions
     ULONG function = 0x7E; // Our ioctl function
     uint16_t my_data[3] = {0};
     ULONG data_len = 6;
-    
+
     int rc = DosDevIOCtl (m_mouseHandle, category, function,
 	NULL, 0, NULL,           		// Parameters (none)
 	my_data, 6, &data_len); 		// Data (3 words, only first one is used)
@@ -322,7 +344,7 @@ bool Guest::isMouseIntegrationEnabled ()
 	    ret = true;
 	}
     }
-    
+
     closeMouseDriver ();
     return ret;
 }
@@ -334,15 +356,15 @@ void Guest::setMouseIntegration (bool on_off)
     {
     	return;
     }
-    
+
     logf (2, "[Host::setMouseIntegration] -> %s", on_off ? "on" : "off");
-    
+
     // Ioctl variables
     ULONG category = 7; // mouse functions
     ULONG function = 0x7F; // Our ioctl function
     uint16_t my_param = 0;
     ULONG param_len = 2;
-    
+
     my_param = on_off ? 1 : 0;  // Proper command to turn integration on or off
     int rc = DosDevIOCtl (m_mouseHandle, category, function,
 	&my_param, 2, &param_len,       // Parameters (1 word)
@@ -351,14 +373,14 @@ void Guest::setMouseIntegration (bool on_off)
     {
     	logf (1, "[Host::setMouseIntegration] Failed to set mouse integration, error code = %d", rc);
     }
-    
+
     closeMouseDriver ();
 }
 
 
 
 /**
-@brief Reboot guest OS 
+@brief Reboot guest OS
 
 Issues a command to properly reboot the OS, but applications do not have
 the ability to halt the process (e.g. prompt you with a question like "Discard changes to file X?").
@@ -374,18 +396,18 @@ void Guest::rebootOS ()
     ULONG action = 0;
     const int IOCTL_DOS = 0x00D5;
     const int DOS_REBOOT = 0x00AB;
-    
+
     log (1, "[Guest::rebootOS]");
     rc = DosOpen("\\DEV\\DOS$", &dosfile, &action, 0,
-    	FILE_NORMAL, 
-    	OPEN_ACTION_OPEN_IF_EXISTS, 
+    	FILE_NORMAL,
+    	OPEN_ACTION_OPEN_IF_EXISTS,
     	OPEN_SHARE_DENYNONE | OPEN_ACCESS_READWRITE, 0);
     if (rc != NO_ERROR)
     {
     	logf (0, "[Guest::rebootOS] Failed to open DOS$ device: %d", rc);
     	return;
     }
- 
+
     rc = DosShutdown (0);
     if (rc != NO_ERROR)
     {
@@ -393,7 +415,7 @@ void Guest::rebootOS ()
     }
     else
     {
-	rc = DosDevIOCtl (dosfile, IOCTL_DOS, DOS_REBOOT, 
+	rc = DosDevIOCtl (dosfile, IOCTL_DOS, DOS_REBOOT,
 	    NULL, 0, NULL, NULL, 0, NULL);
 	// Still here?? Then we did not succeed
 	logf (0, "[Guest::rebootOS] IOCTL failed: %d", rc);
@@ -405,32 +427,46 @@ void Guest::rebootOS ()
 /**
 @brief Shuts down guest OS to the power-off state
 
-As with rebootOS(), does not give the programs time to ask nicely if you want to 
+As with rebootOS(), does not give the programs time to ask nicely if you want to
 save files, etc.
 
-Should also not return.
+May return while the shutdown process continues in the background.
 */
 void Guest::haltOS ()
 {
-    char proc_name[CCHMAXPATH] = {0};
-    char args[CCHMAXPATH] = "shutdown\0/o\0"; 
-    RESULTCODES res = {0};
+    STARTDATA sd;
+    ULONG session;
+    PID pid;
     int rc;
-    
-    // In contrast to rebootOS we use an external tool for this: shutdown /o
-    rc = DosExecPgm (proc_name, sizeof (proc_name), EXEC_SYNC,
-    	args, NULL,
-    	&res, "shutdown.exe");
-    if (rc != NO_ERROR)
+
+    // Use DosStartSession as we may be starting a non-PM app
+    memset (&sd, 0, sizeof (STARTDATA));
+    /* First two fields */
+    sd.Length = sizeof (STARTDATA);
+    sd.Related = SSF_RELATED_INDEPENDENT;
+    sd.FgBg = SSF_FGBG_FORE;
+    sd.TraceOpt = SSF_TRACEOPT_NONE;
+    sd.SessionType = SSF_TYPE_DEFAULT;
+    sd.PgmTitle = "shutdown";
+    sd.PgmName = "c:\\sys\\bin\\shutdown.exe";
+    sd.PgmInputs = (unsigned char *)"/o";
+
+    rc = DosStartSession (&sd, &session, &pid);
+
+    if (rc != 0 && rc != 457)
     {
-    	logf (0, "[Guest::haltOS] DosExec failed: %d", rc);
+        logf (0, "[Guest::haltOS] DosStartSession failed: %d", rc);
+    }
+    else
+    {
+        logf (2, "Shutdown process is pid %d", pid);
     }
 }
 
 
 
 /**
-@brief Open connection to mouse driver 
+@brief Open connection to mouse driver
 
 Opens a handle to the driver so we can perform IOCTL calls to it.
 */
@@ -440,7 +476,7 @@ bool Guest::openMouseDriver()
     {
     	return true;
     }
-  
+
     log (1, "[Host] Opening mouse driver");
     ULONG action = 0;
     ULONG size = 0;
@@ -448,15 +484,15 @@ bool Guest::openMouseDriver()
     ULONG open_flags = FILE_OPEN;
     ULONG open_mode = OPEN_SHARE_DENYNONE | OPEN_FLAGS_FAIL_ON_ERROR | OPEN_ACCESS_READWRITE;
     APIRET rc = NO_ERROR;
-  
+
     // Open the device to the driver */
-    rc = DosOpen("MOUSE$", &m_mouseHandle, &action, 
-	size, 
+    rc = DosOpen("MOUSE$", &m_mouseHandle, &action,
+	size,
 	attribute,
 	open_flags,
 	open_mode,
 	(PEAOP2)NULL);
-    
+
     if (rc != NO_ERROR)
     {
     	logf (0, "[Host] Failed to open MOUSE$ driver: rc = %d", rc);
